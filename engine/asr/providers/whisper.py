@@ -27,7 +27,8 @@ class FasterWhisperProvider:
             language=lang or Settings.ASR_LANG,
             vad_filter=True,
             beam_size=5,
-            word_timestamps=False
+            word_timestamps=False,
+            initial_prompt=Settings.ASR_INITIAL_PROMPT
         )
         segs = [
             AsrSegment(start=s.start, end=s.end, text=s.text,
