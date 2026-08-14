@@ -19,3 +19,13 @@ class Settings:
 
     # CORS
     ALLOW_ORIGINS: list[str] = ["*"]
+
+    ASR_DEFAULT_PROVIDER = os.getenv("ASR_PROVIDER", "whisper")
+    ASR_MODEL = os.getenv("ASR_MODEL", "medium")  # MVP 先 medium;验收按 RTF 调 large-v3/small
+    ASR_DEVICE = os.getenv("ASR_DEVICE", "auto")  # Mac 实际 cpu
+    ASR_COMPUTE = os.getenv("ASR_COMPUTE", "int8")
+    ASR_LANG = os.getenv("ASR_LANG", "zh")
+    ASR_SAMPLE_RATE = 16000  # 单一来源
+    ASR_VAD_THRESHOLD = float(os.getenv("ASR_VAD_THRESHOLD", "0.5"))
+    ASR_VAD_MIN_SILENCE_MS = int(os.getenv("ASR_VAD_MIN_SILENCE_MS", "300"))
+    ASR_VAD_SPEECH_PAD_MS = int(os.getenv("ASR_VAD_SPEECH_PAD_MS", "30"))

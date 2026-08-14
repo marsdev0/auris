@@ -10,12 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from engine.config import Settings
+from engine.asr.router import router as asr_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"{Settings.APP_NAME} v{Settings.APP_VERSION} 启动中...")
     logger.info(f"服务地址: http://{Settings.HOST}:{Settings.PORT}")
+    from engine.asr.service import get_asr_service
+    svc = get_asr_service()
+    logger.info(f"已注册 ASR provider: {svc.registry.names()}")
     yield
     logger.info("服务正在关闭...")
 
@@ -35,6 +39,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(asr_router, prefix="/asr")
 
 
 @app.get("/")
