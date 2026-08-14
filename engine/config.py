@@ -1,3 +1,5 @@
+# Copyright (c) 2026 marsdev0
+# Licensed under the MIT License. See the LICENSE file for details.
 """Engine 配置（骨架）。
 
 业务配置（LLMProvider / EndPoint / ASR / TTS providers 等）后续按需加。
@@ -29,3 +31,5 @@ class Settings:
     ASR_VAD_THRESHOLD = float(os.getenv("ASR_VAD_THRESHOLD", "0.5"))
     ASR_VAD_MIN_SILENCE_MS = int(os.getenv("ASR_VAD_MIN_SILENCE_MS", "300"))
     ASR_VAD_SPEECH_PAD_MS = int(os.getenv("ASR_VAD_SPEECH_PAD_MS", "30"))
+
+    ASR_INITIAL_PROMPT: str = os.getenv("ASR_INITIAL_PROMPT", "以下是普通话的句子,使用简体中文。")

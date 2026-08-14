@@ -1,3 +1,5 @@
+# Copyright (c) 2026 marsdev0
+# Licensed under the MIT License. See the LICENSE file for details.
 """Engine 入口（骨架）。
 
 业务 router（asr / tts / agent / speech / ...）后续写好后，

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 marsdev0
+# Licensed under the MIT License. See the LICENSE file for details.
 from fastapi import APIRouter, UploadFile, HTTPException
 
 from engine.asr.service import get_asr_service
