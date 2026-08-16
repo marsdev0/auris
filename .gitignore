@@ -9,6 +9,11 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Java
+target/
+*.class
+hs_err_pid*
+
 # IDE
 .idea/
 .vscode/
@@ -19,3 +24,4 @@ __pycache__/
 docs/
 .claude/
 scripts/
+docker/

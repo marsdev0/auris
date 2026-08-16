@@ -1,0 +1,17 @@
+name: auris-server
+
+services:
+
+  nacos:
+    image: nacos/nacos-server:v2.4.3
+    container_name: auris-nacos
+    ports:
+      - "8848:8848"  # HTTP API（控制台、旧版客户端）
+      - "9848:9848"  # gRPC（Nacos 2.x 客户端主要通信方式，注册发现用的就是这个）
+    environment:
+      MODE: standalone
+    volumes:
+      - nacos-data:/home/nacos/data
+
+volumes:
+  nacos-data:
