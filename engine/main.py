@@ -7,6 +7,7 @@
 """
 from contextlib import asynccontextmanager
 
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
@@ -22,6 +23,8 @@ async def lifespan(app: FastAPI):
     from engine.asr.service import get_asr_service
     svc = get_asr_service()
     logger.info(f"已注册 ASR provider: {svc.registry.names()}")
+    from engine.asr.vad import get_vad_engine
+    get_vad_engine()                      # 预热 VAD(分段与流式共用单例)
     yield
     logger.info("服务正在关闭...")
 
@@ -42,8 +45,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(asr_router, prefix="/asr")
-
+app.include_router(asr_router, tags=["asr"])
 
 @app.get("/")
 async def root():

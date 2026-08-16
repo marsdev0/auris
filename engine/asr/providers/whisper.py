@@ -1,10 +1,12 @@
 # Copyright (c) 2026 marsdev0
 # Licensed under the MIT License. See the LICENSE file for details.
+from typing import AsyncIterator
+
 from faster_whisper import WhisperModel
 
 from engine.asr.audio import load_audio
 from engine.asr.provider import AsrCapability
-from engine.asr.schemas import AsrResult, AsrSegment, AsrWord
+from engine.asr.schemas import AsrResult, AsrSegment, AsrWord, PartialResult
 from engine.config import Settings
 
 
@@ -43,6 +45,9 @@ class FasterWhisperProvider:
             segments=segs,
             language=info.language
         )
+
+    async def stream(self, chunks: AsyncIterator[bytes], lang: str | None = None) -> AsyncIterator[PartialResult]:
+        raise NotImplementedError("whisper provider 不支持真流式")
 
 
 # 模块级，供ProviderRegistry 目录扫描发现
