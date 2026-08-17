@@ -18,8 +18,10 @@
     <name>auris-server</name>
 
     <modules>
-        <module>ai</module>
-        <module>gateway</module>
+        <module>ai-service</module>
+        <module>gateway-service</module>
+        <module>user-service</module>
+        <module>push-service</module>
     </modules>
 
     <properties>

@@ -10,8 +10,7 @@
         <version>0.0.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>ai</artifactId>
-    <description>AI 服务：对接 engine </description>
+    <artifactId>push-service</artifactId>
 
     <dependencies>
         <dependency>
