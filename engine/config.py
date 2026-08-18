@@ -33,3 +33,7 @@ class Settings:
     ASR_VAD_SPEECH_PAD_MS = int(os.getenv("ASR_VAD_SPEECH_PAD_MS", "30"))
 
     ASR_INITIAL_PROMPT: str = os.getenv("ASR_INITIAL_PROMPT", "以下是普通话的句子,使用简体中文。")
+
+    ASR_QWEN3_BASE_URL = os.getenv("ASR_QWEN3_BASE_URL", "http://127.0.0.1:28000/v1")
+    ASR_QWEN3_API_KEY = os.getenv("ASR_QWEN3_API_KEY", "123456")
+    ASR_QWEN3_MODEL = os.getenv("ASR_QWEN3_MODEL", "Qwen3-ASR-1.7B-4bit")
