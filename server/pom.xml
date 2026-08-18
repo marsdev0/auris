@@ -18,10 +18,14 @@
     <name>auris-server</name>
 
     <modules>
+        <!-- 微服务 -->
         <module>ai-service</module>
         <module>gateway-service</module>
         <module>user-service</module>
         <module>push-service</module>
+
+        <!-- 模块 -->
+        <module>common</module>
     </modules>
 
     <properties>
@@ -58,7 +62,7 @@
 
             <!-- 项目内部模块 -->
             <dependency>
-                <groupId>com.mars</groupId>
+                <groupId>com.mars.auris</groupId>
                 <artifactId>common</artifactId>
                 <version>${project.version}</version>
             </dependency>
