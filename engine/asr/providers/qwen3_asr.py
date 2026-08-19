@@ -16,6 +16,11 @@ class Qwen3AsrProvider:
     name = "qwen3-asr"
     capabilities: set[AsrCapability] = set()  # HTTP转写，无真流式
 
+    @staticmethod
+    def _dump_resp(resp) -> None:
+        """打印服务端原始响应(完整 JSON)，调试用"""
+        print(f"[qwen3-asr] raw response:\n{resp.model_dump_json(indent=2)}")
+
     def __init__(self):
         self._client = AsyncOpenAI(
             base_url=Settings.ASR_QWEN3_BASE_URL,
@@ -31,12 +36,13 @@ class Qwen3AsrProvider:
             language=lang or Settings.ASR_LANG,
             response_format="verbose_json"
         )
+        self._dump_resp(resp)  # 调试用:不想打印时注释掉这一行
         # verbose_json 才有 segments/language；服务端若只支持 json 则优雅降级为纯文本
         segs = [
             AsrSegment(
                 start=s.start, end=s.end, text=s.text, words=[
                     AsrWord(start=w.start, end=w.end, word=w.word)
-                    for w in (s.words or [])
+                    for w in (getattr(s, "words", None) or [])
                 ]
             )
             for s in (getattr(resp, "segments", None) or [])

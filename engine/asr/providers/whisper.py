@@ -1,5 +1,6 @@
 # Copyright (c) 2026 marsdev0
 # Licensed under the MIT License. See the LICENSE file for details.
+import asyncio
 from typing import AsyncIterator
 
 from faster_whisper import WhisperModel
@@ -22,6 +23,9 @@ class FasterWhisperProvider:
         )
 
     async def transcribe(self, audio: bytes, lang: str | None = None) -> AsrResult:
+        return await asyncio.to_thread(self._transcribe_sync, audio, lang)
+
+    def _transcribe_sync(self, audio: bytes, lang: str | None = None) -> AsrResult:
         # 返回音频数组
         y = load_audio(audio)
         segments, info = self._model.transcribe(

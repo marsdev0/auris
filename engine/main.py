@@ -25,7 +25,10 @@ async def lifespan(app: FastAPI):
     logger.info(f"已注册 ASR provider: {svc.registry.names()}")
     from engine.asr.vad import get_vad_engine
     get_vad_engine()                      # 预热 VAD(分段与流式共用单例)
+    from engine.asr.long_audio.tasks import  cleanup_expired
+    cleanup_task = asyncio.create_task(cleanup_expired())  # TTL 清理(启动一轮+每小时)
     yield
+    cleanup_task.cancel()
     logger.info("服务正在关闭...")
 
 

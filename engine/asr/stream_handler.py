@@ -147,7 +147,6 @@ class StreamHandler:
 
     async def _transcribe(self, seg: _Segment) -> PartialResult:
         """整段送 provider:裸 PCM 包 WAV 头(transcribe 契约是"任意格式字节")→ final。"""
-        # NOTE: whisper 推理是 CPU 同步阻塞;多连接并发时应换 asyncio.to_thread
         result = await self._provider.transcribe(pcm_to_wav(seg.pcm))
         return PartialResult(is_final=True, text=result.text.strip(),
                              beg_ms=seg.beg_ms, end_ms=seg.end_ms)

@@ -10,7 +10,8 @@
 "VAD 单一来源"纪律针对编排层:全进程只有一个 VadEngine(见 get_vad_engine),
 规避旧项目"流式一套 VAD、长音频另一套"的坑。
 """
-from silero_vad import load_silero_vad, VADIterator
+import numpy as np
+from silero_vad import load_silero_vad, VADIterator, get_speech_timestamps
 
 from engine.config import Settings
 
@@ -55,6 +56,22 @@ class VadEngine:
             speech_pad_ms=Settings.ASR_VAD_SPEECH_PAD_MS,
         )
 
+    def detect_regions(self, audio: np.ndarray) -> list[tuple[int, int]]:
+        """批处理入口（长音频分段用）：整段音频 -> 语音区[start, end)样本位列表
+        与流式路径 new_iterator() 共享同一个 silero 模型单例
+        流式：VADIterator 逐窗推进、吐 start/end 事件，禁音判定参数为300ms
+        批式：整段一次检测，直接拿全部语音区，静音判定参数为500ms
+        """
+        ts = get_speech_timestamps(
+            audio=audio,
+            model=self._model,
+            threshold=Settings.ASR_VAD_THRESHOLD,
+            min_speech_duration_ms=250,
+            min_silence_duration_ms=Settings.ASR_SEG_MIN_SILENCE_MS,
+            speech_pad_ms=Settings.ASR_VAD_SPEECH_PAD_MS,
+            sampling_rate=Settings.ASR_SAMPLE_RATE,
+        )
+        return [(t["start"], t["end"]) for t in ts]
 
 _engine: VadEngine | None = None
 

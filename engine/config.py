@@ -37,3 +37,24 @@ class Settings:
     ASR_QWEN3_BASE_URL = os.getenv("ASR_QWEN3_BASE_URL", "http://127.0.0.1:28000/v1")
     ASR_QWEN3_API_KEY = os.getenv("ASR_QWEN3_API_KEY", "123456")
     ASR_QWEN3_MODEL = os.getenv("ASR_QWEN3_MODEL", "Qwen3-ASR-1.7B-4bit")
+
+    # ------ 长音频分段 ------
+    ASR_SEG_TARGET_MIN_S = int(os.getenv("ASR_SEG_TARGET_MIN_S", "10"))  # 段最短
+    ASR_SEG_TARGET_MAX_S = int(os.getenv("ASR_SEG_TARGET_MAX_S", "60"))  # 段最长
+    ASR_SEG_MIN_SILENCE_MS = int(os.getenv("ASR_SEG_MIN_SILENCE_MS", "500"))  # 批处理判静音(流式 300)
+    ASR_SEG_OVERLAP_MS = int(os.getenv("ASR_SEG_OVERLAP_MS", "300"))  # 尾延,只进 pcm 不进报告边界
+    ASR_SEG_SNAP_WINDOW_S = float(os.getenv("ASR_SEG_SNAP_WINDOW_S", "2.0"))  # 硬切对齐搜索窗
+
+    # ------ 长音频并发调度 ------
+    # 全局推理并发上限 M(整段路径与分段路径共享)。老项目实测脚本结论:待复跑
+    # phase2b_concurrency_test 定,默认 2 是保守值,不拍脑袋调大
+    ASR_LONG_CONCURRENCY = int(os.getenv("ASR_LONG_CONCURRENCY", "2"))
+    ASR_SEG_TIMEOUT_S = float(os.getenv("ASR_SEG_TIMEOUT_S", "120"))  # 单段超时(60s段 whisper CPU RTF≈1 不误杀)
+    ASR_SEG_RETRY = int(os.getenv("ASR_SEG_RETRY", "3"))  # 段级重试
+
+    # ------ 长音频任务 ------
+    # 低于阈值整段转写, 高于走分段并发
+    ASR_LONG_THRESHOLD_S = int(os.getenv("ASR_LONG_THRESHOLD_S", "600"))
+    # 内存护栏:解码峰值 ~6.9MB/分钟,4h ≈ 920MB,超过直接拒绝
+    ASR_LONG_MAX_DURATION_S = int(os.getenv("ASR_LONG_MAX_DURATION_S", "14400"))
+    ASR_TASK_TTL_H = int(os.getenv("ASR_TASK_TTL_H", "24"))  # 任务表过期(小时)
