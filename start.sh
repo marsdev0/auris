@@ -51,10 +51,10 @@ start_one() {
     case "$name" in
         infra)    match="__never_match__"; port="" ;;
         engine)   match="python -m engine.main"; port="" ;;
-        ai)       match="spring-boot:run.*-pl ai-service"; port=8081 ;;
-        user)     match="spring-boot:run.*-pl user-service"; port=8082 ;;
-        push)     match="spring-boot:run.*-pl push-service"; port=8083 ;;
-        gateway)  match="spring-boot:run.*-pl gateway-service"; port=8080 ;;
+        ai)       match="ai-service spring-boot:run"; port=8081 ;;
+        user)     match="user-service spring-boot:run"; port=8082 ;;
+        push)     match="push-service spring-boot:run"; port=8083 ;;
+        gateway)  match="gateway-service spring-boot:run"; port=8080 ;;
         *)        echo "[error] 未知服务: ${name}" >&2; usage ;;
     esac
 

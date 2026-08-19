@@ -19,10 +19,10 @@ stop_one() {
             cd server && docker compose down; cd ..
             ;;
         engine)   pkill -f "python -m engine.main" 2>/dev/null || true ;;
-        ai)       pkill -f "spring-boot:run.*-pl ai-service" 2>/dev/null || true ;;
-        user)     pkill -f "spring-boot:run.*-pl user-service" 2>/dev/null || true ;;
-        push)     pkill -f "spring-boot:run.*-pl push-service" 2>/dev/null || true ;;
-        gateway)  pkill -f "spring-boot:run.*-pl gateway-service" 2>/dev/null || true ;;
+        ai)       pkill -f "ai-service spring-boot:run" 2>/dev/null || true ;;
+        user)     pkill -f "user-service spring-boot:run" 2>/dev/null || true ;;
+        push)     pkill -f "push-service spring-boot:run" 2>/dev/null || true ;;
+        gateway)  pkill -f "gateway-service spring-boot:run" 2>/dev/null || true ;;
         *)        echo "[error] 未知服务: ${name}" >&2; usage ;;
     esac
 }
