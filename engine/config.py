@@ -27,7 +27,7 @@ class Settings:
     ASR_DEVICE = os.getenv("ASR_DEVICE", "auto")  # Mac 实际 cpu
     ASR_COMPUTE = os.getenv("ASR_COMPUTE", "int8")
     ASR_LANG = os.getenv("ASR_LANG", "zh")
-    ASR_SAMPLE_RATE = 16000  # 单一来源
+    ASR_SAMPLE_RATE = 16000
     ASR_VAD_THRESHOLD = float(os.getenv("ASR_VAD_THRESHOLD", "0.5"))
     ASR_VAD_MIN_SILENCE_MS = int(os.getenv("ASR_VAD_MIN_SILENCE_MS", "300"))
     ASR_VAD_SPEECH_PAD_MS = int(os.getenv("ASR_VAD_SPEECH_PAD_MS", "30"))
@@ -58,3 +58,10 @@ class Settings:
     # 内存护栏:解码峰值 ~6.9MB/分钟,4h ≈ 920MB,超过直接拒绝
     ASR_LONG_MAX_DURATION_S = int(os.getenv("ASR_LONG_MAX_DURATION_S", "14400"))
     ASR_TASK_TTL_H = int(os.getenv("ASR_TASK_TTL_H", "24"))  # 任务表过期(小时)
+
+    # ------ 实时语音识别 ------
+    ASR_QAS_MODEL = os.getenv("ASR_QAS_MODEL", "qwen-audio-3.0-asr-flash-streaming")
+    ASR_QAS_BASE_URL = os.getenv("ASR_QAS_BASE_URL", "wss://dashscope.aliyuncs.com/api-ws/v1/inference")
+    ASR_QAS_API_KEY = os.getenv("ASR_QAS_API_KEY")
+    ASR_QAS_HEARTBEAT = os.getenv("ASR_QAS_HEARTBEAT", 60)  # 60s 静音保活;心跳帧 provider 内过滤
+    ASR_QAS_SILENCE_MS = os.getenv("ASR_QAS_SILENCE_MS", 400) # max_sentence_silence(交互场景;默认 1300 偏会议)
