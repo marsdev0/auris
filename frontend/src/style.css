@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --color-auris-base: #0f1115;
+  --color-auris-surface: #171a21;
+  --color-auris-elevated: #1f232d;
+  --color-auris-accent: #4f8cff;
+  --color-auris-accent-glow: rgba(79, 140, 255, 0.15);
+  --color-auris-success: #22c55e;
+  --color-auris-danger: #ef4444;
+  --color-auris-text: #eef1f6;
+  --color-auris-text-secondary: #8b93a7;
+  --color-auris-text-muted: #565f73;
+  --color-auris-border: #262b36;
+}
