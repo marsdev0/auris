@@ -14,7 +14,6 @@ from engine.asr.long_audio import tasks as long_tasks
 
 router = APIRouter(prefix="/v1/asr", tags=["asr"])
 
-
 @router.post("/transcribe")
 async def transcribe(audio: UploadFile, provider: str | None = None):
     data = await audio.read()
@@ -27,45 +26,6 @@ async def transcribe(audio: UploadFile, provider: str | None = None):
     except Exception as e:
         raise HTTPException(400, f"音频解码或转写失败: {e}")
     return res.model_dump()
-
-
-# @router.websocket("/stream")
-# async def stream(ws: WebSocket):
-#     """
-#     client -> server:
-#     { "type": "start", "config": { "lang": "zh", "provider": "whisper" } }   // 控制帧(文本)
-#     // binary PCM 16bit 16kHz mono,每帧 ~20-60ms                              // 音频帧(二进制,不封装 JSON)
-#     { "type": "stop" }
-#
-#     server -> client:
-#     { "type": "asr_result", "is_final": true, "text": "...", "beg_ms": 1200, "end_ms": 3500 }
-#     { "type": "error", "code": "ASR_FAILED", "message": "..." }
-#     """
-#     await ws.accept()
-#     handler: StreamHandler | None = None
-#     try:
-#         while True:
-#             # 混合帧:必须用 receive() 拿原始 dict
-#             # 按 message["text"](JSON 控制帧)/ message["bytes"](音频帧)区分
-#             # 不要用 receive_text / receive_bytes —— 混合帧会卡死
-#             msg = await ws.receive()
-#             if msg.get("text"):
-#                 ctrl = json.loads(msg["text"])
-#                 if ctrl["type"] == "start":
-#                     handler = StreamHandler(ctrl.get("config", {}).get("provider"))
-#                 elif ctrl["type"] == "stop" and handler:
-#                     final = await handler.flush()
-#                     if final:
-#                         await ws.send_ext(final.model_dump_json())
-#                     break
-#             elif msg.get("bytes") and handler:
-#                 # 二进制音频帧(PCM 16k)——必须与 text 分支平级,缩进进控制帧链里永远走不到
-#                 for r in await handler.on_audio(msg["bytes"]):
-#                     await ws.send_text(r.model_dump_json())
-#     except WebSocketDisconnect:
-#         pass
-#     except Exception as e:
-#         logger.warning(f"WS /asr/stream 异常: {e}")
 
 @router.websocket("/stream")
 async def asr_stream(ws: WebSocket):
@@ -115,35 +75,44 @@ async def asr_stream(ws: WebSocket):
             yield item
 
     async def _reader():
-        while True:
-            msg = await ws.receive()
-            if msg.get("text"):
-                if json.loads(msg["text"]).get("type") == "stop":
-                    await audio_q.put(None)
-                    return
-            elif msg.get("bytes"):
-                await audio_q.put(msg["bytes"])
+        try:
+            while True:
+                msg = await ws.receive()
+                if msg.get("text"):
+                    if json.loads(msg["text"]).get("type") == "stop":
+                        await audio_q.put(None)
+                        return
+                elif msg.get("bytes"):
+                    await audio_q.put(msg["bytes"])
+        except WebSocketDisconnect:
+            logger.info("真流式客户端断连,投哨兵收尾云会话")
+            pass
+        finally:
+            # 手动设置哨兵，_pipe就会结束，不至于一直卡在audio_q.get()
+            await audio_q.put(None)
 
     reader = asyncio.create_task(_reader())
     try:
         async for r in provider.stream(_pipe()):
             await ws.send_text(r.model_dump_json())
+    except WebSocketDisconnect:
+        # 客户端已断，错误帧无处可发，直接走到finally
+        logger.info("真流式收尾: 客户端断连(发送路径), 静默关闭")
+        pass
     except Exception as e:
-        await ws.send_text(json.dumps({
-            "type": "error",
-            "code": "ASR_FAILED",
-            "message": str(e)
-        }))
+        # 原异常先落日志——except 里再抛的新异常会顶掉它,先记下来才不会丢病因
+        logger.warning(f"WS /asr/stream 真流式异常: {e}")
+        try:
+            await ws.send_text(json.dumps({
+                "type": "error",
+                "code": "ASR_FAILED",
+                "message": str(e)
+            }))
+        except Exception as send_err:
+            # 客户端恰好也断了，错误帧发不出去——不算新错误,只 log,别让二次异常顶掉原异常
+            logger.info(f"错误帧发送失败(客户端已断): {send_err}")
     finally:
         reader.cancel()
-
-
-
-
-
-
-
-
 
 @router.post("/tasks", status_code=202)
 async def create_task(audio: UploadFile, provider: str | None = Form(None)):
