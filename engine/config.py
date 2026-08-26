@@ -60,8 +60,11 @@ class Settings:
     ASR_TASK_TTL_H = int(os.getenv("ASR_TASK_TTL_H", "24"))  # 任务表过期(小时)
 
     # ------ 实时语音识别 ------
+    # 注:getenv 出来恒为 str,必须就地转型再进协议 JSON——服务端对字符串类型参数
+    # 的 run-task 校验宽松(task-started 照回),但收到音频帧后会以 1011
+    # "parse parameters failed" 断连(实测 2026-08-26),错误出现在音频阶段极难定位
     ASR_QAS_MODEL = os.getenv("ASR_QAS_MODEL", "qwen-audio-3.0-asr-flash-streaming")
     ASR_QAS_BASE_URL = os.getenv("ASR_QAS_BASE_URL", "wss://dashscope.aliyuncs.com/api-ws/v1/inference")
-    ASR_QAS_API_KEY = os.getenv("ASR_QAS_API_KEY")
-    ASR_QAS_HEARTBEAT = os.getenv("ASR_QAS_HEARTBEAT", 60)  # 60s 静音保活;心跳帧 provider 内过滤
-    ASR_QAS_SILENCE_MS = os.getenv("ASR_QAS_SILENCE_MS", 400) # max_sentence_silence(交互场景;默认 1300 偏会议)
+    ASR_QAS_API_KEY = os.getenv("ASR_QAS_API_KEY", "")
+    ASR_QAS_HEARTBEAT = os.getenv("ASR_QAS_HEARTBEAT", "true").lower() == "true"  # 60s 静音保活;心跳帧 provider 内过滤
+    ASR_QAS_SILENCE_MS = int(os.getenv("ASR_QAS_SILENCE_MS", "400"))  # max_sentence_silence(交互场景;默认 1300 偏会议)

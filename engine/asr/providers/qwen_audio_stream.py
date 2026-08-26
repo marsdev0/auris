@@ -48,13 +48,12 @@ class QwenAudioStreamingProvider:
     name = "qwen-audio-streaming"
     capabilities = {AsrCapability.STREAMING}
 
-    def __init__(self, settings):
-        self._s = settings
-        if not self._s.ASR_QWEN3_RT_API_KEY:
-            logger.warning("ASR_QWEN3_RT_API_KEY 未配置, qwen3-realtime 将无法建链")
+    def __init__(self):
+        if not Settings.ASR_QAS_API_KEY:
+            logger.warning("ASR_QAS_API_KEY 未配置, qwen3-realtime 将无法建链")
 
     async def transcribe(self, audio: bytes, lang: str | None = None) -> AsrResult:
-        pass
+        raise NotImplementedError("qwen-audio-streaming provider 只支持真流式")
 
     async def stream(self, chunks: AsyncIterator[bytes], lang: str | None = None) -> AsyncIterator[PartialResult]:
         """
@@ -66,7 +65,8 @@ class QwenAudioStreamingProvider:
         t0 = time.monotonic()
         headers = {"Authorization": f"Bearer {Settings.ASR_QAS_API_KEY}"}
         async with websockets.connect(Settings.ASR_QAS_BASE_URL,
-                                      additional_headers=headers) as ws:
+                                      additional_headers=headers,
+                                      proxy=None) as ws:  # 国内端点直连;不显式禁用时 websockets 会探测系统代理,本地挂了 SOCKS 代理(如 127.0.0.1:7897)就要求 python-socks 依赖并炸
             logger.info("ws#3 connected %.0fms", (time.monotonic() - t0) * 1000)
             await self._run_task(ws, task_id, lang)  # run-task,等 task-started
             await self._await_task_started(ws)  # 等"就绪"事件,带超时
@@ -119,7 +119,7 @@ class QwenAudioStreamingProvider:
         绝不永久挂死;超时后整条连接就废弃,recv 被 cancel 也不心疼丢消息。"""
         while True:
             try:
-                msg = asyncio.wait_for(ws.recv(), timeout=_START_TIMEOUT_S)
+                msg = await asyncio.wait_for(ws.recv(), timeout=_START_TIMEOUT_S)
             except TimeoutError:
                 raise RuntimeError(f"run-task 后 {_START_TIMEOUT_S}s 未收到 task-started")
             evt = json.loads(msg)
@@ -135,7 +135,7 @@ class QwenAudioStreamingProvider:
         """裸二进制直传;chunks 耗尽 → finish-task。只在 task-started 之后被创建"""
         async for chunk in chunks:
             await ws.send(chunk)
-        await ws.send({
+        await ws.send(json.dumps({
             "header": {
                 'action': "finish-task",
                 'task_id': task_id,
@@ -144,7 +144,7 @@ class QwenAudioStreamingProvider:
             "payload": {
                 'input': {}
             }
-        })
+        }))
 
     def _handle_state_event(self, msg: str) -> bool:
         """终态事件(task-finished/task-failed)→ True(结束生成器),False=继续"""
@@ -170,3 +170,7 @@ class QwenAudioStreamingProvider:
             beg_ms=sentence.get("begin_time"),  # 句级时间戳白拿(§1.3)
             end_ms=sentence.get("end_time"),
         )
+
+
+# 模块级，供ProviderRegistry 目录扫描发现
+PROVIDER = QwenAudioStreamingProvider

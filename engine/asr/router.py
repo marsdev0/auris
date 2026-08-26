@@ -93,7 +93,7 @@ async def asr_stream(ws: WebSocket):
                 msg = await ws.receive()
                 if msg.get("text"):
                     c = json.loads(msg["text"])
-                    if c["stop"] == "stop":
+                    if c["type"] == "stop":
                         final = await handler.flush()
                         if final:
                             await ws.send_text(final.model_dump_json())
