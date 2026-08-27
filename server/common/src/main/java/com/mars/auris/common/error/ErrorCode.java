@@ -1,19 +1,21 @@
 package com.mars.auris.common.error;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 /**
+ * 服务位 - 服务
+ * 0 - 通用common
+ * 1 - ai-service
+ * 2 - user-service
+ * 3- push-service
+ * 4 - gateway-service
+ *
  * @author geyan
  * @date 2026/8/18
  */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class ErrorCode {
+public interface ErrorCode {
 
-    private Integer code;
+    Integer getHttpStatus();
 
-    private String msg;
+    Integer getCode();
+
+    String getMsg();
 }
