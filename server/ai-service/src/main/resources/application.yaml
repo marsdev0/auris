@@ -10,3 +10,13 @@ spring:
       discovery:
         server-addr: 127.0.0.1:8848
 
+  servlet:
+    multipart:
+      enabled: true  # 启用文件上传
+      max-file-size: 10MB  # 单个文件最大size
+      max-request-size: 10MB # 整个请求最大size
+      file-size-threshold: 0 # 直接落临时文件，不占堆，转发时流式读盘
+
+engine:
+  base-url: http://127.0.0.1:18000
+  provider: qwen3-asr
