@@ -12,10 +12,19 @@ from engine.asr.service import get_asr_service
 from engine.asr.stream_handler import StreamHandler
 from engine.asr.long_audio import tasks as long_tasks
 
+"""
+ASR 三条入口,按场景选:
+- POST /transcribe   短音频:同步阻塞,当场返回全文
+- WS   /stream       实时麦克风流式:边说边出
+- POST /tasks        长音频:异步任务,202 秒回 task_id,轮询取结果
+"""
 router = APIRouter(prefix="/v1/asr", tags=["asr"])
 
 @router.post("/transcribe")
-async def transcribe(audio: UploadFile, provider: str | None = None):
+async def transcribe(audio: UploadFile, provider: str | None = Form(None)):
+    """短音频同步转写:请求阻塞到转写完成,直接返回全文(text/segments/language)。
+    与 /tasks 的区别:本接口全程挂着连接等结果,适合秒级~分钟级音频;
+    长音频请走 POST /tasks(异步,秒回 task_id,轮询获取)。"""
     data = await audio.read()
     if not data:
         raise HTTPException(400, "音频内容为空")
@@ -116,7 +125,9 @@ async def asr_stream(ws: WebSocket):
 
 @router.post("/tasks", status_code=202)
 async def create_task(audio: UploadFile, provider: str | None = Form(None)):
-    """提交长音频转写任务,秒回 task_id。大文件上传/限流由 gateway/ai-service 负责。"""
+    """提交长音频转写任务,秒回 task_id,后台跑完整管线。
+    与 /transcribe 的区别:异步——立即 202,结果轮询 GET /tasks/{id} 获取。
+    大文件上传/限流由 gateway/ai-service 负责。"""
     data = await audio.read()
     if not data:
         raise HTTPException(400, "音频内容为空")
@@ -133,7 +144,7 @@ async def create_task(audio: UploadFile, provider: str | None = Form(None)):
 
 @router.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
-    """轮询任务状态。completed 前 result 不随行(轻量),结果走 /result。"""
+    """轮询任务状态;completed 时 result 随行一次拿全(未完成时不含 result,轮询保持轻量)。"""
     task = long_tasks.get_task(task_id)
     if task is None:
         raise HTTPException(404, "任务不存在或已过期")
