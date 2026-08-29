@@ -1,0 +1,12 @@
+# 网关路由表（本地为主；如需不改代码调整路由，可发布同名 dataId 到 Nacos 覆盖）
+# 注意: Spring Cloud 2025.0+ key 为 spring.cloud.gateway.server.webflux.routes
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: ai-service
+              uri: lb://ai-service          # 从 Nacos 服务发现找名为 ai-service 的实例
+              predicates:
+                - Path=/v1/transcribe/**

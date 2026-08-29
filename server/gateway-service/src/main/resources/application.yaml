@@ -10,4 +10,6 @@ spring:
       server-addr: 127.0.0.1:8848  # nacos服务地址, discovery和config共用
 
   config:
-    import: optional:nacos:auris-gateway-routes.yaml?refreshEnabled=true
+    import:
+      - optional:classpath:auris-gateway-routes.yaml                 # 路由:本地为主
+#      - optional:nacos:auris-gateway-routes.yaml?refreshEnabled=true  # 可选:发布到 Nacos 才生效,用于远程覆盖
