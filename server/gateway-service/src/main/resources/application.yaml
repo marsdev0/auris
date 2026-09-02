@@ -11,5 +11,9 @@ spring:
 
   config:
     import:
-      - optional:classpath:auris-gateway-routes.yaml                 # 路由:本地为主
-#      - optional:nacos:auris-gateway-routes.yaml?refreshEnabled=true  # 可选:发布到 Nacos 才生效,用于远程覆盖
+      - optional:nacos:auris-gateway-routes.yaml?refreshEnabled=true  # 发布到 Nacos 才生效,用于远程覆盖
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
