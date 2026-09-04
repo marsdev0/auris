@@ -1,6 +1,7 @@
 package com.mars.auris.ai.transcribe;
 
 import com.mars.auris.ai.config.EngineProperties;
+import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.common.TranscribeConst;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
 import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
@@ -10,10 +11,14 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
@@ -62,7 +67,9 @@ class TranscribeServiceTest {
         // body 有重载,body(Object) 必须显式 any(Object.class),否则 stub 落到别的重载上 → NPE
         when(bodySpec.body(any(Object.class))).thenReturn(bodySpec);
         when(bodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.body(AsrResultDTO.class)).thenReturn(response);
+        // Service 用 body(ParameterizedTypeReference) 解 EngineResp 壳,stub 同一重载
+        when(responseSpec.body(any(ParameterizedTypeReference.class)))
+                .thenReturn(new EngineResp<>(0, "success", response));
         return bodySpec;
     }
 
@@ -153,7 +160,8 @@ class TranscribeServiceTest {
         when(bodySpec.contentType(MediaType.MULTIPART_FORM_DATA)).thenReturn(bodySpec);
         when(bodySpec.body(any(Object.class))).thenReturn(bodySpec);
         when(bodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.body(AsrResultDTO.class)).thenReturn(null);
+        // 同一重载:body(ParameterizedTypeReference) 返回 null
+        when(responseSpec.body(any(ParameterizedTypeReference.class))).thenReturn(null);
 
         // 执行 + 验证
         AurisException ex = assertThrows(AurisException.class,
@@ -161,15 +169,62 @@ class TranscribeServiceTest {
         assertEquals(502101, ex.getCode());
     }
 
-    // ========== 场景 5:engine 挂了(连接拒绝) ==========
-    // 现状固定:Service 尚未做异常映射,ResourceAccessException 原样抛出;
-    // 按 P1 方案 §3.4 应映射为 503 ENGINE_UNAVAILABLE,实现后此测试应改断言
+    // ========== 场景 5:engine 挂了(连接拒绝)→ 503 ENGINE_UNAVAILABLE ==========
+    // P1 方案 §3.4 异常映射:ResourceAccessException 不再原样抛出
 
     @Test
-    void transcribeSync_engineDown_propagatesResourceAccess_forNow() {
+    void transcribeSync_engineDown_throwsEngineUnavailable() {
         mockEngineThrow(new ResourceAccessException("Connection refused"));
 
-        assertThrows(ResourceAccessException.class,
+        AurisException ex = assertThrows(AurisException.class,
                 () -> transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper"));
+        assertEquals(503_101, ex.getCode());
+        assertEquals(503, ex.getHttpStatus());
+    }
+
+    // ========== 场景 6:engine 返回 404 → 404 TASK_NOT_FOUND(msg 透传 engine 原文) ==========
+
+    @Test
+    void transcribeSync_engine404_throwsTaskNotFound() {
+        HttpClientErrorException notFound = new HttpClientErrorException(
+                HttpStatus.NOT_FOUND, "Not Found", HttpHeaders.EMPTY,
+                "{\"detail\": \"任务不存在或已过期\"}".getBytes(), null);
+        mockEngineThrow(notFound);
+
+        AurisException ex = assertThrows(AurisException.class,
+                () -> transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper"));
+        assertEquals(404_101, ex.getCode());
+        assertEquals("任务不存在或已过期", ex.getMsg());
+    }
+
+    // ========== 场景 7:engine 返回 400 → 400 AUDIO_INVALID(msg 透传) ==========
+
+    @Test
+    void transcribeSync_engine400_throwsAudioInvalid() {
+        HttpClientErrorException badRequest = new HttpClientErrorException(
+                HttpStatus.BAD_REQUEST, "Bad Request", HttpHeaders.EMPTY,
+                "{\"detail\": \"音频内容为空\"}".getBytes(), null);
+        mockEngineThrow(badRequest);
+
+        AurisException ex = assertThrows(AurisException.class,
+                () -> transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper"));
+        assertEquals(400_101, ex.getCode());
+        assertEquals("音频内容为空", ex.getMsg());
+    }
+
+    // ========== 场景 8:engine 返回 500 → 502 ENGINE_ERROR(不透传原文) ==========
+
+    @Test
+    void transcribeSync_engine500_throwsEngineError_noLeak() {
+        HttpClientErrorException serverError = new HttpClientErrorException(
+                HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", HttpHeaders.EMPTY,
+                "{\"detail\": \"/usr/local/lib/python3.12/xxx 内部路径\"}".getBytes(), null);
+        mockEngineThrow(serverError);
+
+        AurisException ex = assertThrows(AurisException.class,
+                () -> transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper"));
+        assertEquals(502_101, ex.getCode());
+        // 关键:5xx 不透传 engine 原文(可能含内部路径),只给统一文案
+        assertEquals("转写引擎内部错误", ex.getMsg());
     }
 }

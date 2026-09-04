@@ -61,11 +61,9 @@ public class TranscribeController {
 
     @GetMapping("/task/{taskId}")
     public ApiResponse<LongTaskResp> getTask(@PathVariable String taskId) {
-        try {
-            return ApiResponse.ok(transcribeService.getTask(taskId));
-        } catch (Exception e) {
-            throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
-        }
+        // 异常映射在 Service 层完成,这里不 catch——
+        // AurisException 会被 GlobalExceptionHandler 按映射后的状态码渲染
+        return ApiResponse.ok(transcribeService.getTask(taskId));
     }
 
 }

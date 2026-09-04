@@ -23,7 +23,7 @@ public class LongTaskResp {
 
 
     @Data
-    private static class Result {
+    public static class Result {
 
         private String text;
     }
