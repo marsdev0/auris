@@ -1,9 +1,11 @@
 // Copyright (c) 2026 marsdev0
 // Licensed under the MIT License. See the LICENSE file for details.
-package com.mars.auris.ai.transcribe;
+package com.mars.auris.ai.transcribe.controller;
 
-import com.mars.auris.ai.model.EngineTaskStatus;
-import com.mars.auris.ai.model.TranscribeResult;
+import com.mars.auris.ai.transcribe.model.LongTaskResp;
+import com.mars.auris.ai.transcribe.model.SubmitTaskResp;
+import com.mars.auris.ai.transcribe.model.TranscribeResp;
+import com.mars.auris.ai.transcribe.service.TranscribeService;
 import com.mars.auris.common.error.AurisException;
 import com.mars.auris.common.error.CommonErrorCode;
 import com.mars.auris.common.rsp.ApiResponse;
@@ -34,8 +36,8 @@ public class TranscribeController {
 
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<TranscribeResult> transcribe(@RequestParam("audio") MultipartFile audio,
-                                                    @RequestParam(value = "provider", required = false) String provider) {
+    public ApiResponse<TranscribeResp> transcribe(@RequestParam("audio") MultipartFile audio,
+                                                  @RequestParam(value = "provider", required = false) String provider) {
         try {
             byte[] bytes = audio.getBytes();
             return ApiResponse.ok(transcribeService.transcribeSync(bytes, provider));
@@ -45,9 +47,25 @@ public class TranscribeController {
         }
     }
 
-    @GetMapping("/{taskId}")
-    public ApiResponse<EngineTaskStatus> getTask(@PathVariable String taskId) {
-        return null;
+    @PostMapping("/task/start")
+    public ApiResponse<SubmitTaskResp> submitTask(@RequestParam("audio") MultipartFile audio,
+                                                  @RequestParam(value = "provider", required = false) String provider) {
+        try {
+            byte[] bytes = audio.getBytes();
+            return ApiResponse.ok(transcribeService.submitTask(bytes, provider));
+        } catch (IOException e) {
+            log.error("submitTask error ", e);
+            throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
+        }
+    }
+
+    @GetMapping("/task/{taskId}")
+    public ApiResponse<LongTaskResp> getTask(@PathVariable String taskId) {
+        try {
+            return ApiResponse.ok(transcribeService.getTask(taskId));
+        } catch (Exception e) {
+            throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
+        }
     }
 
 }

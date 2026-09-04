@@ -20,6 +20,7 @@ ASR 三条入口,按场景选:
 """
 router = APIRouter(prefix="/v1/asr", tags=["asr"])
 
+
 @router.post("/transcribe")
 async def transcribe(audio: UploadFile, provider: str | None = Form(None)):
     """短音频同步转写:请求阻塞到转写完成,直接返回全文(text/segments/language)。
@@ -34,7 +35,12 @@ async def transcribe(audio: UploadFile, provider: str | None = Form(None)):
         raise HTTPException(404, f"provider 不存在: {provider}")
     except Exception as e:
         raise HTTPException(400, f"音频解码或转写失败: {e}")
-    return res.model_dump()
+    return {
+        "code": 0,
+        "message": "success",
+        "data": res.model_dump()
+    }
+
 
 @router.websocket("/stream")
 async def asr_stream(ws: WebSocket):
@@ -76,6 +82,7 @@ async def asr_stream(ws: WebSocket):
 
     # 真流式
     audio_q: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=64)
+
     async def _pipe() -> AsyncIterator[bytes]:
         while True:
             item = await audio_q.get()
@@ -123,8 +130,9 @@ async def asr_stream(ws: WebSocket):
     finally:
         reader.cancel()
 
-@router.post("/tasks", status_code=202)
-async def create_task(audio: UploadFile, provider: str | None = Form(None)):
+
+@router.post("/task/start", status_code=202)
+async def start_task(audio: UploadFile, provider: str | None = Form(None)):
     """提交长音频转写任务,秒回 task_id,后台跑完整管线。
     与 /transcribe 的区别:异步——立即 202,结果轮询 GET /tasks/{id} 获取。
     大文件上传/限流由 gateway/ai-service 负责。"""
@@ -139,26 +147,35 @@ async def create_task(audio: UploadFile, provider: str | None = Form(None)):
         task_id = await long_tasks.submit(data, provider)
     except KeyError:
         raise HTTPException(404, f"provider 不存在: {provider}")
-    return {"task_id": task_id}
+    return {
+        "code": 0,
+        "message": "success",
+        "data": task_id
+    }
 
 
-@router.get("/tasks/{task_id}")
-async def get_task_status(task_id: str):
-    """轮询任务状态;completed 时 result 随行一次拿全(未完成时不含 result,轮询保持轻量)。"""
-    task = long_tasks.get_task(task_id)
-    if task is None:
-        raise HTTPException(404, "任务不存在或已过期")
-    return task.to_public()
+# @router.get("/task/{task_id}")
+# async def get_task_status(task_id: str):
+#     """轮询任务状态;completed 时 result 随行一次拿全(未完成时不含 result,轮询保持轻量)。"""
+#     task = long_tasks.get_task(task_id)
+#     if task is None:
+#         raise HTTPException(404, "任务不存在或已过期")
+#     return task.to_public()
 
 
-@router.get("/tasks/{task_id}/result")
-async def get_task_result(task_id: str):
+@router.get("/task/{task_id}")
+async def get_task(task_id: str):
     """取转写结果:全文 + 段级明细(时间戳/状态/耗时)。仅 completed 可用。"""
     task = long_tasks.get_task(task_id)
     if task is None:
         raise HTTPException(404, "任务不存在或已过期")
-    if task.status != "completed":
-        raise HTTPException(409, f"任务未完成,当前状态: {task.status}")
-    if task.result is None:  # 理论不可达(completed 必有 result),防御
-        raise HTTPException(500, "任务完成但结果缺失")
-    return task.result.model_dump()
+    # if task.status != "completed":
+    #     raise HTTPException(409, f"任务未完成,当前状态: {task.status}")
+    # if task.result is None:  # 理论不可达(completed 必有 result),防御
+    #     raise HTTPException(500, "任务完成但结果缺失")
+    # return task.result.model_dump()
+    return {
+        "code": 0,
+        "message": "success",
+        "data": task
+    }

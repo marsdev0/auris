@@ -1,6 +1,6 @@
 // Copyright (c) 2026 marsdev0
 // Licensed under the MIT License. See the LICENSE file for details.
-package com.mars.auris.ai.model.engine;
+package com.mars.auris.ai.transcribe.model.engine;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -15,10 +15,13 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class EngineAsrResult {
+public class AsrSegment {
+
+    private double start;
+
+    private double end;
 
     private String text;
 
-    private List<EngineAsrSegment> segments;
-
+    private List<AsrWord> words;
 }

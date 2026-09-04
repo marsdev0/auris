@@ -1,8 +1,10 @@
 package com.mars.auris.ai.transcribe;
 
 import com.mars.auris.ai.config.EngineProperties;
-import com.mars.auris.ai.model.TranscribeResult;
-import com.mars.auris.ai.model.engine.EngineAsrResult;
+import com.mars.auris.ai.transcribe.common.TranscribeConst;
+import com.mars.auris.ai.transcribe.model.TranscribeResp;
+import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
+import com.mars.auris.ai.transcribe.service.TranscribeService;
 import com.mars.auris.common.error.AurisException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -50,17 +52,17 @@ class TranscribeServiceTest {
      *
      * @return bodySpec,供调用方做 ArgumentCaptor 验证
      */
-    private RestClient.RequestBodySpec mockEngineSuccess(EngineAsrResult response) {
+    private RestClient.RequestBodySpec mockEngineSuccess(AsrResultDTO response) {
         RestClient.RequestBodyUriSpec uriSpec = mock(RestClient.RequestBodyUriSpec.class);
         RestClient.RequestBodySpec bodySpec = mock(RestClient.RequestBodySpec.class);
         RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
         when(engineSubmit.post()).thenReturn(uriSpec);
-        when(uriSpec.uri(TranscribeConst.URL_TRANSCRIBE)).thenReturn(bodySpec);
+        when(uriSpec.uri(TranscribeConst.URL_ASR_TRANSCRIBE)).thenReturn(bodySpec);
         when(bodySpec.contentType(MediaType.MULTIPART_FORM_DATA)).thenReturn(bodySpec);
         // body 有重载,body(Object) 必须显式 any(Object.class),否则 stub 落到别的重载上 → NPE
         when(bodySpec.body(any(Object.class))).thenReturn(bodySpec);
         when(bodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.body(EngineAsrResult.class)).thenReturn(response);
+        when(responseSpec.body(AsrResultDTO.class)).thenReturn(response);
         return bodySpec;
     }
 
@@ -71,7 +73,7 @@ class TranscribeServiceTest {
         RestClient.RequestBodyUriSpec uriSpec = mock(RestClient.RequestBodyUriSpec.class);
         RestClient.RequestBodySpec bodySpec = mock(RestClient.RequestBodySpec.class);
         when(engineSubmit.post()).thenReturn(uriSpec);
-        when(uriSpec.uri(TranscribeConst.URL_TRANSCRIBE)).thenReturn(bodySpec);
+        when(uriSpec.uri(TranscribeConst.URL_ASR_TRANSCRIBE)).thenReturn(bodySpec);
         when(bodySpec.contentType(MediaType.MULTIPART_FORM_DATA)).thenReturn(bodySpec);
         when(bodySpec.body(any(Object.class))).thenReturn(bodySpec);
         when(bodySpec.retrieve()).thenThrow(ex);
@@ -103,12 +105,12 @@ class TranscribeServiceTest {
     @Test
     void transcribeSync_success_returnsText() {
         // 准备:mock engine 正常返回
-        EngineAsrResult response = new EngineAsrResult();
+        AsrResultDTO response = new AsrResultDTO();
         response.setText("你好世界");
         mockEngineSuccess(response);
 
         // 执行
-        TranscribeResult result = transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper");
+        TranscribeResp result = transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper");
 
         // 验证:engine 的全文透传给了前端模型
         assertEquals("你好世界", result.getText());
@@ -118,7 +120,7 @@ class TranscribeServiceTest {
 
     @Test
     void transcribeSync_providerNull_fallsBackToConfig() {
-        RestClient.RequestBodySpec bodySpec = mockEngineSuccess(new EngineAsrResult());
+        RestClient.RequestBodySpec bodySpec = mockEngineSuccess(new AsrResultDTO());
 
         // 执行(provider 传 null)
         transcribeService.transcribeSync("audio-bytes".getBytes(), null);
@@ -131,7 +133,7 @@ class TranscribeServiceTest {
 
     @Test
     void transcribeSync_providerSpecified_forwarded() {
-        RestClient.RequestBodySpec bodySpec = mockEngineSuccess(new EngineAsrResult());
+        RestClient.RequestBodySpec bodySpec = mockEngineSuccess(new AsrResultDTO());
 
         transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper");
 
@@ -147,11 +149,11 @@ class TranscribeServiceTest {
         RestClient.RequestBodySpec bodySpec = mock(RestClient.RequestBodySpec.class);
         RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
         when(engineSubmit.post()).thenReturn(uriSpec);
-        when(uriSpec.uri(TranscribeConst.URL_TRANSCRIBE)).thenReturn(bodySpec);
+        when(uriSpec.uri(TranscribeConst.URL_ASR_TRANSCRIBE)).thenReturn(bodySpec);
         when(bodySpec.contentType(MediaType.MULTIPART_FORM_DATA)).thenReturn(bodySpec);
         when(bodySpec.body(any(Object.class))).thenReturn(bodySpec);
         when(bodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.body(EngineAsrResult.class)).thenReturn(null);
+        when(responseSpec.body(AsrResultDTO.class)).thenReturn(null);
 
         // 执行 + 验证
         AurisException ex = assertThrows(AurisException.class,
