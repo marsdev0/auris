@@ -10,3 +10,33 @@ spring:
       discovery:
         server-addr: 127.0.0.1:8848
 
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/auris?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: assign_id
+      logic-delete-field: is_deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+auris:
+  jwt:
+    access-token-secret: ${JWT_ACCESS_SECRET:auris-access-secret-key-2026-change-in-prod}
+    refresh-token-secret: ${JWT_REFRESH_SECRET:auris-refresh-secret-key-2026-change-in-prod}
+    access-token-expire: 7200
+    refresh-token-expire: 604800
+    issuer: auris
+
+

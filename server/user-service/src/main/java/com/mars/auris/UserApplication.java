@@ -1,4 +1,4 @@
-package com.mars.auris.user;
+package com.mars.auris;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

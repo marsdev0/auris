@@ -30,3 +30,4 @@ docs/
 scripts/
 docker/
 logs/
+server/sql/
