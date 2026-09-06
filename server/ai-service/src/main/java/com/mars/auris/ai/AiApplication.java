@@ -11,7 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *
  * @author geyan
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"com.mars.auris.ai", "com.mars.auris.common.error"})
 @EnableScheduling
 public class AiApplication {
 

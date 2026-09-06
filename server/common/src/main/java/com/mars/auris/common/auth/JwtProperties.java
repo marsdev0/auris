@@ -1,14 +1,12 @@
-package com.mars.auris.auth.config;
+package com.mars.auris.common.auth;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
 
 /**
  * @author geyan
  * @date 2026/9/6
  */
-@Configuration
 @ConfigurationProperties(prefix = "auris.jwt")
 @Data
 public class JwtProperties {

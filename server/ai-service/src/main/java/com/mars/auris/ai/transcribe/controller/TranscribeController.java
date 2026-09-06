@@ -6,12 +6,14 @@ import com.mars.auris.ai.transcribe.model.LongTaskResp;
 import com.mars.auris.ai.transcribe.model.SubmitTaskResp;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
 import com.mars.auris.ai.transcribe.service.TranscribeService;
+import com.mars.auris.common.auth.UserPrincipal;
 import com.mars.auris.common.error.AurisException;
 import com.mars.auris.common.error.CommonErrorCode;
 import com.mars.auris.common.rsp.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,9 +50,11 @@ public class TranscribeController {
     }
 
     @PostMapping("/task/start")
-    public ApiResponse<SubmitTaskResp> submitTask(@RequestParam("audio") MultipartFile audio,
+    public ApiResponse<SubmitTaskResp> submitTask(@AuthenticationPrincipal UserPrincipal user,
+                                                  @RequestParam("audio") MultipartFile audio,
                                                   @RequestParam(value = "provider", required = false) String provider) {
         try {
+            log.info("submitTask userId={}, provider={}", user.userId(),provider);
             byte[] bytes = audio.getBytes();
             return ApiResponse.ok(transcribeService.submitTask(bytes, provider));
         } catch (IOException e) {

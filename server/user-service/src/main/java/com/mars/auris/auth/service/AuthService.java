@@ -6,6 +6,7 @@ import com.mars.auris.auth.model.LoginResp;
 import com.mars.auris.auth.model.RefreshTokenReq;
 import com.mars.auris.auth.model.RegisterReq;
 import com.mars.auris.auth.model.TokenResp;
+import com.mars.auris.common.auth.JwtService;
 import com.mars.auris.common.error.AurisException;
 import com.mars.auris.user.entity.UserDO;
 import com.mars.auris.user.error.UserErrorCode;
@@ -122,7 +123,7 @@ public class AuthService {
         if (!"refresh".equals(type)) {
             throw new AurisException(UserErrorCode.REFRESH_TOKEN_INVALID);
         }
-        Long userId = claims.get("userId", Long.class);
+        Long userId = Long.parseLong(claims.getSubject());
         String stored = refreshTokenStore.get(userId);
         if (StringUtils.isEmpty(stored) || !stored.equals(req.getRefreshToken())) {
             throw new AurisException(UserErrorCode.REFRESH_TOKEN_INVALID);

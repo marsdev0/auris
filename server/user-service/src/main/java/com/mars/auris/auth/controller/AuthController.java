@@ -1,10 +1,10 @@
 package com.mars.auris.auth.controller;
 
-import com.mars.auris.auth.filter.CustomUserDetails;
 import com.mars.auris.auth.model.LoginReq;
 import com.mars.auris.auth.model.LoginResp;
 import com.mars.auris.auth.model.RefreshTokenReq;
 import com.mars.auris.auth.model.TokenResp;
+import com.mars.auris.common.auth.UserPrincipal;
 import com.mars.auris.common.rsp.ApiResponse;
 import com.mars.auris.auth.model.RegisterReq;
 import com.mars.auris.auth.service.AuthService;
@@ -39,8 +39,8 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(@AuthenticationPrincipal CustomUserDetails userDetails) {
-        authService.logout(userDetails.getUserId());
+    public ApiResponse<Void> logout(@AuthenticationPrincipal UserPrincipal user) {
+        authService.logout(user.userId());
         return ApiResponse.ok();
     }
 

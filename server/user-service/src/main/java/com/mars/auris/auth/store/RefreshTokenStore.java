@@ -1,6 +1,6 @@
 package com.mars.auris.auth.store;
 
-import com.mars.auris.auth.config.JwtProperties;
+import com.mars.auris.common.auth.JwtProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;

@@ -1,12 +1,10 @@
-package com.mars.auris.auth.service;
+package com.mars.auris.common.auth;
 
-import com.mars.auris.auth.config.JwtProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -17,12 +15,15 @@ import java.util.UUID;
  * @author geyan
  * @date 2026/9/6
  */
-@Service
 @Slf4j
 public class JwtService {
 
-    @Autowired
-    private JwtProperties jwtProperties;
+
+    private final JwtProperties jwtProperties;
+
+    public JwtService(@Autowired JwtProperties jwtProperties) {
+        this.jwtProperties = jwtProperties;
+    }
 
     public String generateAccessToken(Long userId, String username) {
         Date now = new Date();
@@ -70,6 +71,21 @@ public class JwtService {
             log.error("Parse token failed", e);
         }
         return null;
+    }
+
+    /**
+     * 校验并解析 accessToken;无效/过期/类型不符返回 null。
+     * secret 选择、issuer、type=access、subject 取数全在这,调用方不得自己手搓 claims
+     */
+    public UserPrincipal parseAccessToken(String token) {
+        Claims claims = parseToken(token, false);
+        if (claims == null || !"access".equals(claims.get("type"))) {
+            return null;
+        }
+        // subject 是签发时的字符串,parseLong 稳定;
+        // claims.get("userId", Long.class) 在小数值时拿到 Integer 会抛 RequiredTypeException
+        return new UserPrincipal(Long.parseLong(claims.getSubject()),
+                claims.get("username", String.class));
     }
 
 

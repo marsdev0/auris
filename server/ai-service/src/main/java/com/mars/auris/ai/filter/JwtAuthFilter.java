@@ -1,4 +1,4 @@
-package com.mars.auris.auth.filter;
+package com.mars.auris.ai.filter;
 
 import com.mars.auris.common.auth.JwtService;
 import com.mars.auris.common.auth.UserPrincipal;
@@ -36,10 +36,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String token = header.substring(7);
             UserPrincipal principal = jwtService.parseAccessToken(token);
             if (principal != null) {
-                // 构造 Spring Security 认证对象
                 var authToken = new UsernamePasswordAuthenticationToken(principal, null, List.of());
-                // 给认证对象附加请求级别的细节（远程 IP、Session ID 等）。
-                // Spring Security 内部的一些组件会读取这些信息，比如日志审计、登录 IP 记录。这一行属于标准写法，不加也不影响认证流程。
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
