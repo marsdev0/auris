@@ -26,6 +26,7 @@ package com.mars.auris.auth.model;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
+import lombok.ToString;
 
 /**
  * @author geyan
@@ -37,6 +38,7 @@ public class LoginReq {
     @NotBlank(message = "用户名不能为空")
     private String username;
 
+    @ToString.Exclude
     @NotBlank(message = "密码不能为空")
     private String password;
 }

@@ -11,6 +11,7 @@ import com.mars.auris.user.entity.UserDO;
 import com.mars.auris.user.error.UserErrorCode;
 import com.mars.auris.user.mapper.UserMapper;
 import io.jsonwebtoken.Claims;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import com.mars.auris.auth.store.RefreshTokenStore;
@@ -22,6 +23,7 @@ import org.springframework.util.StringUtils;
  * @author geyan
  * @date 2026/9/6
  */
+@Slf4j
 @Service
 public class AuthService {
 
@@ -69,10 +71,12 @@ public class AuthService {
         query.eq(UserDO::getUsername, req.getUsername());
         UserDO userDO = userMapper.selectOne(query);
         if (userDO == null) {
-            throw new AurisException(UserErrorCode.USER_NOT_FOUND);
+            log.warn("登录失败, 用户不存在, username: {}", req.getUsername());
+            throw new AurisException(UserErrorCode.LOGIN_FAILED);
         }
         if (!passwordEncoder.matches(req.getPassword(), userDO.getPassword())) {
-            throw new AurisException(UserErrorCode.USER_PASSWORD_ERROR);
+            log.warn("登录失败, 密码错误, username: {}", req.getUsername());
+            throw new AurisException(UserErrorCode.LOGIN_FAILED);
         }
         if (!userDO.enable()) {
             throw new AurisException(UserErrorCode.ACCOUNT_DISABLED);

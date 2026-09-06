@@ -27,6 +27,7 @@ package com.mars.auris.auth.model;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import lombok.ToString;
 
 /**
  * @author geyan
@@ -39,6 +40,7 @@ public class RegisterReq {
     @Size(min = 3, max = 50, message = "用户名长度必须在 3-50 个字符之间")
     private String username;
 
+    @ToString.Exclude
     @NotBlank(message = "密码不能为空")
     @Size(min = 6, max = 100, message = "密码长度必须在 6-100 个字符之间")
     private String password;
