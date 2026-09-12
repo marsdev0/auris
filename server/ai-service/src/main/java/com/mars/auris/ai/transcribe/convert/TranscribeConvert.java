@@ -5,6 +5,7 @@ package com.mars.auris.ai.transcribe.convert;
 import com.mars.auris.ai.transcribe.common.TranscribeConst;
 import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
 import com.mars.auris.ai.transcribe.model.LongTaskResp;
+import com.mars.auris.ai.transcribe.model.RecordItemResp;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
 import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
 import com.mars.auris.ai.transcribe.model.engine.AsrTaskDTO;
@@ -38,5 +39,18 @@ public interface TranscribeConvert {
             resp.setErrorMsg(record.getErrorMsg());
         }
         return resp;
+    }
+
+    default RecordItemResp toItem(TranscribeRecordDO record) {
+        RecordItemResp item = new RecordItemResp();
+        item.setRecordId(String.valueOf(record.getId()));
+        item.setTitle(record.getTitle());
+        // DB int 0/1/2 → 状态词,与轮询响应对齐
+        item.setStatus(record.getStatus() == 1 ? TranscribeConst.ENGINE_STATUS_COMPLETED
+                : record.getStatus() == 2 ? TranscribeConst.ENGINE_STATUS_FAILED
+                : "transcribing");
+        item.setDurationMs(record.getDurationMs());
+        item.setCreatedAt(record.getCreatedAt());
+        return item;
     }
 }

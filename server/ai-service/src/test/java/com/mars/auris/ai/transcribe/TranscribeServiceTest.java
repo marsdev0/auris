@@ -5,6 +5,7 @@ import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.common.TranscribeConst;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
 import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
+import com.mars.auris.ai.transcribe.service.TranscribeRecordService;
 import com.mars.auris.ai.transcribe.service.TranscribeService;
 import com.mars.auris.common.error.AurisException;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +38,8 @@ import static org.mockito.Mockito.when;
  */
 @SpringBootTest(properties = "spring.cloud.nacos.discovery.enabled=false") // nacos 是注册旁路,测试直接关掉
 class TranscribeServiceTest {
+
+    private static final Long USER_ID = 1L;
 
     @Autowired
     private TranscribeService transcribeService;
@@ -49,6 +53,13 @@ class TranscribeServiceTest {
      */
     @MockitoBean(name = "engineSubmitRestClient")
     private RestClient engineSubmit;
+
+    /**
+     * 持久层整体 mock 掉:测试不碰真库(DataSource/mapper 也不需要真连接),
+     * 只验证 Service 编排层"调了什么",不验证"落库细节"(那是 RecordService 自己的单测)
+     */
+    @MockitoBean
+    private TranscribeRecordService recordService;
 
     // ========== 辅助方法:mock RestClient 的调用链(POST + multipart) ==========
 
@@ -117,10 +128,12 @@ class TranscribeServiceTest {
         mockEngineSuccess(response);
 
         // 执行
-        TranscribeResp result = transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper");
+        TranscribeResp result = transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper");
 
         // 验证:engine 的全文透传给了前端模型
         assertEquals("你好世界", result.getText());
+        // 验证:成功后以当前 userId 落库(P3 写入点⑤,历史记录)
+        verify(recordService).saveTranscribeSyncResult(eq(USER_ID), any(EngineResp.class));
     }
 
     // ========== 场景 2:provider 未传,兜底到配置默认值 ==========
@@ -130,7 +143,7 @@ class TranscribeServiceTest {
         RestClient.RequestBodySpec bodySpec = mockEngineSuccess(new AsrResultDTO());
 
         // 执行(provider 传 null)
-        transcribeService.transcribeSync("audio-bytes".getBytes(), null);
+        transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), null);
 
         // 验证:发出去的 multipart 里 provider part 是配置的默认值
         assertEquals("qwen3-asr", capturedPart(bodySpec, "provider"));
@@ -142,7 +155,7 @@ class TranscribeServiceTest {
     void transcribeSync_providerSpecified_forwarded() {
         RestClient.RequestBodySpec bodySpec = mockEngineSuccess(new AsrResultDTO());
 
-        transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper");
+        transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper");
 
         assertEquals("whisper", capturedPart(bodySpec, "provider"));
     }
@@ -165,7 +178,7 @@ class TranscribeServiceTest {
 
         // 执行 + 验证
         AurisException ex = assertThrows(AurisException.class,
-                () -> transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper"));
+                () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(502101, ex.getCode());
     }
 
@@ -177,7 +190,7 @@ class TranscribeServiceTest {
         mockEngineThrow(new ResourceAccessException("Connection refused"));
 
         AurisException ex = assertThrows(AurisException.class,
-                () -> transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper"));
+                () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(503_101, ex.getCode());
         assertEquals(503, ex.getHttpStatus());
     }
@@ -192,7 +205,7 @@ class TranscribeServiceTest {
         mockEngineThrow(notFound);
 
         AurisException ex = assertThrows(AurisException.class,
-                () -> transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper"));
+                () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(404_101, ex.getCode());
         assertEquals("任务不存在或已过期", ex.getMsg());
     }
@@ -207,7 +220,7 @@ class TranscribeServiceTest {
         mockEngineThrow(badRequest);
 
         AurisException ex = assertThrows(AurisException.class,
-                () -> transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper"));
+                () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(400_101, ex.getCode());
         assertEquals("音频内容为空", ex.getMsg());
     }
@@ -222,7 +235,7 @@ class TranscribeServiceTest {
         mockEngineThrow(serverError);
 
         AurisException ex = assertThrows(AurisException.class,
-                () -> transcribeService.transcribeSync("audio-bytes".getBytes(), "whisper"));
+                () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(502_101, ex.getCode());
         // 关键:5xx 不透传 engine 原文(可能含内部路径),只给统一文案
         assertEquals("转写引擎内部错误", ex.getMsg());

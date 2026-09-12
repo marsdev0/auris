@@ -3,6 +3,8 @@
 package com.mars.auris.ai.transcribe.controller;
 
 import com.mars.auris.ai.transcribe.model.LongTaskResp;
+import com.mars.auris.ai.transcribe.model.PageResp;
+import com.mars.auris.ai.transcribe.model.RecordItemResp;
 import com.mars.auris.ai.transcribe.model.SubmitTaskResp;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
 import com.mars.auris.ai.transcribe.service.TranscribeService;
@@ -14,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -55,7 +58,7 @@ public class TranscribeController {
                                                   @RequestParam("audio") MultipartFile audio,
                                                   @RequestParam(value = "provider", required = false) String provider) {
         try {
-            log.info("submitTask userId={}, provider={}", user.userId(),provider);
+            log.info("submitTask userId={}, provider={}", user.userId(), provider);
             byte[] bytes = audio.getBytes();
             return ApiResponse.ok(transcribeService.submitTask(user.userId(), bytes, provider));
         } catch (IOException e) {
@@ -64,12 +67,26 @@ public class TranscribeController {
         }
     }
 
-    @GetMapping("/task/{id}")
-    public ApiResponse<LongTaskResp> getTask(@AuthenticationPrincipal UserPrincipal user,
-                                             @PathVariable Long id) {
+    @GetMapping("/records/{id}")
+    public ApiResponse<LongTaskResp> getRecord(@AuthenticationPrincipal UserPrincipal user,
+                                               @PathVariable Long id) {
         // 异常映射在 Service 层完成,这里不 catch——
         // AurisException 会被 GlobalExceptionHandler 按映射后的状态码渲染
-        return ApiResponse.ok(transcribeService.getTask(user.userId(), id));
+        return ApiResponse.ok(transcribeService.getRecord(user.userId(), id));
+    }
+
+    @DeleteMapping("/records/{id}")
+    public ApiResponse<Void> deleteRecord(@AuthenticationPrincipal UserPrincipal user,
+                                          @PathVariable Long id) {
+        transcribeService.deleteRecord(user.userId(), id);
+        return ApiResponse.ok();
+    }
+
+    @GetMapping("/records")
+    public ApiResponse<PageResp<RecordItemResp>> getRecords(@AuthenticationPrincipal UserPrincipal user,
+                                                            @RequestParam(value = "page", defaultValue = "1") int page,
+                                                            @RequestParam(value = "size", defaultValue = "10") int size) {
+        return ApiResponse.ok(transcribeService.getRecords(user.userId(), page, size));
     }
 
 }

@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.ai.transcribe.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mars.auris.ai.config.EngineProperties;
 import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.common.TranscribeConst;
@@ -9,6 +10,8 @@ import com.mars.auris.ai.transcribe.convert.TranscribeConvert;
 import com.mars.auris.ai.error.AIErrorCode;
 import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
 import com.mars.auris.ai.transcribe.model.LongTaskResp;
+import com.mars.auris.ai.transcribe.model.PageResp;
+import com.mars.auris.ai.transcribe.model.RecordItemResp;
 import com.mars.auris.ai.transcribe.model.SubmitTaskResp;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
 import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
@@ -29,6 +32,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -85,11 +89,12 @@ public class TranscribeService {
     }
 
 
-    public LongTaskResp getTask(Long userId, Long recordId) {
+    public LongTaskResp getRecord(Long userId, Long recordId) {
         // 1. 先查DB，如果是终态，则直接返回，同时比较userId; 如果是非终态，继续查engine
         TranscribeRecordDO record = recordService.findByUserIdAndRecordId(userId, recordId);
         if (record == null) {
-            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
+            // 查不到/不属于当前用户/已删除,同码同文案,不泄露存在性(P3 §2.5)
+            throw new AurisException(AIErrorCode.RECORD_NOT_FOUND);
         }
         if (record.getStatus() != 0) {
             // 终态(completed/failed)直接回源 DB,不再打 engine
@@ -113,6 +118,33 @@ public class TranscribeService {
         return resp;
     }
 
+
+    public void deleteRecord(Long userId, Long recordId) {
+        // 先查再删，没有意义
+        // 如果不满足条件或不存在，不会删除
+        // 而且加了查询，反而会出现并发问题，TOCTOU
+//        TranscribeRecordDO item = recordService.findByUserIdAndRecordId(userId, recordId);
+//        if (item == null) {
+//            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
+//        }
+        if (!recordService.deleteByUserIdAndRecordId(userId, recordId)) {
+            throw new AurisException(AIErrorCode.RECORD_NOT_FOUND);
+        }
+    }
+
+
+    public PageResp<RecordItemResp> getRecords(Long userId, int page, int size) {
+        long p = Math.max(page, 1);
+        long s = size < 1 ? 10 : Math.min(size, 50);
+        Page<TranscribeRecordDO> result = recordService.pageByUserId(userId, p, s);
+        List<RecordItemResp> items = result.getRecords().stream()
+                .map(convert::toItem).toList();
+
+        return new PageResp<>(result.getTotal(), result.getCurrent(), result.getSize(), items);
+    }
+
+
+    // ==================== 内部逻辑 ===================================
 
     /**
      * engine 调用统一出口:非 0 业务码 + HTTP 异常在此映射为 AurisException。

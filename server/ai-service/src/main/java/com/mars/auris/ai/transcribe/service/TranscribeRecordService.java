@@ -1,8 +1,6 @@
 package com.mars.auris.ai.transcribe.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.mars.auris.ai.error.AIErrorCode;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
 import com.mars.auris.ai.transcribe.mapper.TranscribeRecordMapper;
@@ -16,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -63,10 +60,7 @@ public class TranscribeRecordService {
         } catch (DuplicateKeyException e) {
             // 不能直接返回 item.getId():插入未成功,那是未落库的假 id;查回已存在记录,续用其 recordId
             log.error("engine_task_id 重复, userId: {}, taskId: {}", userId, engineTaskId);
-            LambdaQueryWrapper<TranscribeRecordDO> query = new LambdaQueryWrapper<>();
-            query.eq(TranscribeRecordDO::getUserId, userId);
-            query.eq(TranscribeRecordDO::getEngineTaskId, engineTaskId);
-            TranscribeRecordDO recordDO = recordMapper.selectOne(query);
+            TranscribeRecordDO recordDO = recordMapper.selectByUserIdAndEngineTaskId(userId, engineTaskId);
             if (recordDO == null) {
                 // 撞了全局唯一键但按归属查不到 = 跨用户撞 uuid,超出模型的异常状态
                 throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
@@ -76,30 +70,26 @@ public class TranscribeRecordService {
         return item.getId();
     }
 
-    public void complete(Long userId, Long id,  AsrTaskDTO result) {
-        LambdaUpdateWrapper<TranscribeRecordDO> update = new LambdaUpdateWrapper<>();
-        update.eq(TranscribeRecordDO::getId, id);
-        update.eq(TranscribeRecordDO::getUserId, userId);
-        update.eq(TranscribeRecordDO::getStatus, 0);
-        update.set(TranscribeRecordDO::getText, result.getResult().getText());
-        update.set(TranscribeRecordDO::getStatus, 1);
-        recordMapper.update(update);
+    public void complete(Long userId, Long id, AsrTaskDTO result) {
+        recordMapper.complete(id, userId, result.getResult().getText());
     }
 
     public void fail(Long userId, Long id, String errorMsg) {
-        LambdaUpdateWrapper<TranscribeRecordDO> update = new LambdaUpdateWrapper<>();
-        update.eq(TranscribeRecordDO::getId, id);
-        update.eq(TranscribeRecordDO::getUserId, userId);
-        update.eq(TranscribeRecordDO::getStatus, 0);
-        update.set(TranscribeRecordDO::getErrorMsg, errorMsg);
-        update.set(TranscribeRecordDO::getStatus, 2);
-        recordMapper.update(update);
+        recordMapper.fail(id, userId, errorMsg);
     }
 
     public TranscribeRecordDO findByUserIdAndRecordId(Long userId, Long id) {
-        LambdaQueryWrapper<TranscribeRecordDO> query = new LambdaQueryWrapper<>();
-        query.eq(TranscribeRecordDO::getId, id);
-        query.eq(TranscribeRecordDO::getUserId, userId);
-        return recordMapper.selectOne(query);
+        return recordMapper.selectByIdAndUserId(id, userId);
+    }
+
+    public boolean deleteByUserIdAndRecordId(Long userId, Long recordId) {
+        return recordMapper.deleteByIdAndUserId(recordId, userId) > 0;
+    }
+
+    /**
+     * 不查 text
+     */
+    public Page<TranscribeRecordDO> pageByUserId(Long userId, long page, long size) {
+        return recordMapper.pageByUserId(new Page<>(page, size), userId);
     }
 }
