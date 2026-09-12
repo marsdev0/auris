@@ -16,6 +16,7 @@ export interface UserProfile {
   username: string
   nickname?: string | null
   avatarUrl?: string | null
+  createdAt?: string | null // UTC 无后缀
 }
 
 export function getProfile(): UserProfile | null {
@@ -88,6 +89,7 @@ export async function getMe(): Promise<MeResp> {
       username: cached?.username ?? decodeUsername() ?? '未知用户',
       nickname: cached?.nickname ?? null,
       avatarUrl: cached?.avatarUrl ?? null,
+      createdAt: cached?.createdAt ?? null,
     }
   }
 }
@@ -150,6 +152,7 @@ export interface LoginResp {
   username?: string
   nickname?: string | null
   avatarUrl?: string | null
+  createdAt?: string | null // UTC 无后缀
 }
 
 /** POST /v1/transcribe/task/start 的响应 —— recordId 是 String,严禁转 Number */

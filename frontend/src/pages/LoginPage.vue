@@ -26,6 +26,7 @@ async function submit() {
         username: r.username ?? username.value,
         nickname: r.nickname,
         avatarUrl: r.avatarUrl,
+        createdAt: r.createdAt,
       })
       emit('logged')
     } else {
