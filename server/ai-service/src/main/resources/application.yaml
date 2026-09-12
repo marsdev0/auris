@@ -33,9 +33,7 @@ mybatis-plus:
   global-config:
     db-config:
       id-type: assign_id
-      logic-delete-field: is_deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
+      # 不配 logic-delete:硬删(P3 §2.8),实体无 is_deleted 字段,配置是错误信号已摘除
 
 auris:
   jwt:
