@@ -16,3 +16,7 @@ spring:
                     redis-rate-limiter.replenishRate: 10
                     redis-rate-limiter.burstCapacity: 20
                     key-resolver: "#{@ipKeyResolver}"
+            - id: user-service
+              uri: lb://user-service        # 登录/注册入口;防爆破限流后续按用户名维度加
+              predicates:
+                - Path=/v1/auth/**
