@@ -162,8 +162,9 @@ export interface SubmitResp {
 
 export interface RecordDetail {
   recordId: string
-  status: 'transcribing' | 'completed' | 'failed' | string
+  status: 'downloading' | 'transcribing' | 'completed' | 'failed' | string
   progress: number
+  title: string | null
   result: { text: string } | null
   errorMsg: string | null
 }
@@ -212,6 +213,15 @@ export async function submitTask(file: File): Promise<SubmitResp> {
   const form = new FormData()
   form.append('audio', file)
   return request<SubmitResp>('/v1/transcribe/task/start', { method: 'POST', body: form })
+}
+
+/** 贴 URL 提交(engine 抓取+转写,recordId 同款 String) */
+export async function submitUrl(url: string): Promise<SubmitResp> {
+  return request<SubmitResp>('/v1/transcribe/url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
 }
 
 /** 轮询/详情 */
