@@ -50,6 +50,10 @@ app.add_middleware(
 
 app.include_router(asr_router, tags=["asr"])
 
+# sources:URL 抓取调试直连口(Java 不依赖,排障用;见 P4 方案 §2.6)
+from engine.sources.router import router as sources_router
+app.include_router(sources_router)
+
 @app.get("/")
 async def root():
     return {"service": Settings.APP_NAME, "version": Settings.APP_VERSION, "status": "running"}

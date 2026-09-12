@@ -11,6 +11,11 @@ from engine.asr.provider import AsrCapability
 from engine.asr.service import get_asr_service
 from engine.asr.stream_handler import StreamHandler
 from engine.asr.long_audio import tasks as long_tasks
+from pydantic import BaseModel
+
+class UrlTaskReq(BaseModel):
+    url: str
+    provider: str | None = None
 
 """
 ASR 三条入口,按场景选:
@@ -153,16 +158,6 @@ async def start_task(audio: UploadFile, provider: str | None = Form(None)):
         "data": task_id
     }
 
-
-# @router.get("/task/{task_id}")
-# async def get_task_status(task_id: str):
-#     """轮询任务状态;completed 时 result 随行一次拿全(未完成时不含 result,轮询保持轻量)。"""
-#     task = long_tasks.get_task(task_id)
-#     if task is None:
-#         raise HTTPException(404, "任务不存在或已过期")
-#     return task.to_public()
-
-
 @router.get("/task/{task_id}")
 async def get_task(task_id: str):
     """取转写结果:全文 + 段级明细(时间戳/状态/耗时)。仅 completed 可用。"""
@@ -179,3 +174,20 @@ async def get_task(task_id: str):
         "message": "success",
         "data": task
     }
+
+@router.post("/task/start-url", status_code=202)
+async def start_task_url(req: UrlTaskReq):
+    """贴链提交:同步做 URL 合法性+SSRF 预检(非法秒拒 400),抓取在任务内异步"""
+    if len(req.url) > 2048:
+        raise HTTPException(400, "URL 过长")
+    try:
+        from engine.sources.base import assert_public_url
+        # getaddrinfo 是阻塞 DNS 调用,丢线程执行,不冻事件循环
+        await asyncio.to_thread(assert_public_url, req.url)
+    except Exception as e:
+        raise HTTPException(400, f"非法链接: {e}")
+    try:
+        task_id = await long_tasks.submit_url(req.url, req.provider)
+    except KeyError:
+        raise HTTPException(404, f"provider 不存在: {req.provider}")
+    return {"code": 0, "message": "success", "data": task_id}

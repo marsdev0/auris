@@ -27,14 +27,16 @@ from engine.asr.long_audio.scheduler import Scheduler, _global_sem
 from engine.asr.long_audio.segmenter import Segmenter
 from engine.asr.service import get_asr_service
 from engine.config import Settings
+from engine.sources import fetch_source
 
 _SR = Settings.ASR_SAMPLE_RATE
 
 
 class LongTask(BaseModel):
     task_id: str
-    status: Literal["pending", "decoding", "segmenting", "transcribing",
+    status: Literal["pending", "downloading", "decoding", "segmenting", "transcribing",
                     "completed", "failed"] = "pending"
+    title: str | None = None
     progress: float = 0.0                 # 0~100
     total_segments: int = 0
     done_segments: int = 0
@@ -82,6 +84,14 @@ async def submit(audio: bytes, provider_name: str | None = None) -> str:
     asyncio.create_task(_run(task_id, audio, provider_name))
     return task_id
 
+async def submit_url(url: str, provider_name: str | None = None) -> str:
+    """建 URL 任务 + 后台跑:fetch(下载) → _run 同一条转写管线。"""
+    from engine.sources import fetch_source
+    now = time.time()
+    task_id = uuid4().hex
+    _tasks[task_id] = LongTask(task_id=task_id, created_at=now, updated_at=now)
+    asyncio.create_task(_run_url(task_id, url, provider_name, fetch_source))
+    return task_id
 
 async def _run(task_id: str, audio: bytes, provider_name: str | None) -> None:
     """任务执行体。任何阶段异常 → failed(错误信息进任务,不抛出——后台协程无人接)。"""
@@ -143,6 +153,20 @@ async def _run(task_id: str, audio: bytes, provider_name: str | None) -> None:
         _set(task_id, "failed", error=str(e))
         logger.error(f"长音频任务 {task_id} 失败: {e}")
 
+async def _run_url(task_id, url, provider_name, fetch_source):
+    """URL 任务执行体:多一个 downloading 阶段,其余复用 _run"""
+    from engine.sources.base import SourceError
+    try:
+        _set(task_id, "downloading", 0)
+        src = await fetch_source(url)
+        _set(task_id, title=src.title)
+        audio = src.audio_path.read_bytes()
+        src.audio_path.unlink(missing_ok=True)  # 临时文件用完即删
+        await _run(task_id, audio, provider_name)
+    except SourceError as e:
+        _set(task_id, "failed", 0, error=str(e))
+    except Exception:
+        _set(task_id, "failed", 0, error="下载失败: 未知错误")
 
 async def cleanup_expired() -> None:
     """TTL 清理(挂 main.py lifespan:启动跑一次 + 每小时一轮)。"""

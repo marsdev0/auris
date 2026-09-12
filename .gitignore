@@ -31,3 +31,6 @@ scripts/
 docker/
 logs/
 server/sql/
+
+# URL 抓取临时文件(engine/sources 落盘区,见 base.TMP_DIR)
+tmp/
