@@ -9,6 +9,9 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 /**
  * @author geyan
  * @date 2026/9/11
@@ -41,4 +44,6 @@ public interface TranscribeRecordMapper extends BaseMapper<TranscribeRecordDO> {
     @Delete("DELETE FROM transcribe_record WHERE id = #{id} AND user_id = #{userId}")
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
+    @Update("UPDATE transcribe_record SET status = 2, error_msg = #{errorMsg} WHERE status = 0 AND created_at < #{cutoff}")
+    int failTimeout(@Param("cutoff") LocalDateTime cutoff, @Param("errorMsg") String errorMsg);
 }

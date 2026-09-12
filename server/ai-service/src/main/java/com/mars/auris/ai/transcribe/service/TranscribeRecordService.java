@@ -1,6 +1,7 @@
 package com.mars.auris.ai.transcribe.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mars.auris.ai.config.TranscribeProperties;
 import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
 import com.mars.auris.ai.transcribe.mapper.TranscribeRecordMapper;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -27,6 +29,9 @@ public class TranscribeRecordService {
 
     @Autowired
     private TranscribeRecordMapper recordMapper;
+
+    @Autowired
+    private TranscribeProperties transcribeProperties;
 
     public void saveTranscribeSyncResult(Long userId, EngineResp<AsrResultDTO> result) {
         try {
@@ -91,5 +96,14 @@ public class TranscribeRecordService {
      */
     public Page<TranscribeRecordDO> pageByUserId(Long userId, long page, long size) {
         return recordMapper.pageByUserId(new Page<>(page, size), userId);
+    }
+
+    public int failTimeoutRecords() {
+        LocalDateTime cutoff = LocalDateTime.now().minusHours(transcribeProperties.getTimeoutHours());
+        int n = recordMapper.failTimeout(cutoff, "转写超时未完成");
+        if (n > 0) {
+            log.warn("定时兜底:超 {}h 未完成,标 failed {} 条", transcribeProperties.getTimeoutHours(), n);
+        }
+        return n;
     }
 }

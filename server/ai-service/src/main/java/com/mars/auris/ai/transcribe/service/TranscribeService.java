@@ -33,6 +33,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
@@ -101,12 +102,19 @@ public class TranscribeService {
             return convert.to(record);
         }
 
-
-        EngineResp<AsrTaskDTO> result = callEngine(() -> enginePoll.get()
-                .uri(TranscribeConst.URL_ASR_TASK_GET + record.getEngineTaskId())
-                .retrieve()
-                .body(new ParameterizedTypeReference<>() {
-                }));
+        EngineResp<AsrTaskDTO> result;
+        try {
+            result = callEngine(() -> enginePoll.get()
+                    .uri(TranscribeConst.URL_ASR_TASK_GET + record.getEngineTaskId())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {
+                    }));
+        } catch (AurisException e) {
+            if (Objects.equals(e.getCode(), AIErrorCode.TASK_NOT_FOUND.getCode())) {
+                recordService.fail(userId, record.getId(), e.getMsg());
+            }
+            throw e;
+        }
         if (TranscribeConst.ENGINE_STATUS_COMPLETED.equals(result.getData().getStatus())) {
             recordService.complete(userId, record.getId(), result.getData());
         } else if (TranscribeConst.ENGINE_STATUS_FAILED.equals(result.getData().getStatus())) {
