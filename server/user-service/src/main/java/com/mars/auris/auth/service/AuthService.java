@@ -93,6 +93,7 @@ public class AuthService {
                 .username(userDO.getUsername())
                 .nickname(userDO.getNickname())
                 .avatarUrl(userDO.getAvatarUrl())
+                .createdAt(userDO.getCreatedAt())
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .build();

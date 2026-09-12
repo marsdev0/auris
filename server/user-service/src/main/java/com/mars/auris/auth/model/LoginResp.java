@@ -3,6 +3,8 @@ package com.mars.auris.auth.model;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 /**
  * @author geyan
  * @date 2026/9/6
@@ -20,4 +22,6 @@ public class LoginResp {
     private String nickname;
 
     private String avatarUrl;
+
+    private LocalDateTime createdAt;
 }
