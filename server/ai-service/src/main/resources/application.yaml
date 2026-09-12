@@ -10,6 +10,12 @@ spring:
       discovery:
         server-addr: 127.0.0.1:8848
 
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/auris?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
   servlet:
     multipart:
       enabled: true  # 启用文件上传
@@ -20,6 +26,16 @@ spring:
 engine:
   base-url: http://127.0.0.1:18000
   provider: qwen3-asr
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: assign_id
+      logic-delete-field: is_deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
 
 auris:
   jwt:

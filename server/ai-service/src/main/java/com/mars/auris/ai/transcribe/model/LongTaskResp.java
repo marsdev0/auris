@@ -13,13 +13,18 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class LongTaskResp {
 
-    private String taskId;
+    private String recordId;
 
     private String status;
 
     private double progress;
 
     private Result result;
+
+    /**
+     * 失败原因(failed 时有值)
+     */
+    private String errorMsg;
 
 
     @Data

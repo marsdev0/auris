@@ -11,12 +11,16 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum CommonErrorCode implements ErrorCode {
     OK(200, 200_000, "success"),
+
     BAD_REQUEST(400, 400_001, "请求参数错误"),
     UNAUTHORIZED(401, 401_001, "未登录或凭证已失效"),
     FORBIDDEN(403, 403_001, "无权访问"),
     NOT_FOUND(404, 404_001, "资源不存在"),
     FILE_TOO_LARGE(413, 413_001, "文件超过上限"),
-    INTERNAL_ERROR(500, 500_001, "服务内部错误");;
+
+    INTERNAL_ERROR(500, 500_001, "服务内部错误"),
+    SERIALIZE_ERROR(500, 500_002, "序列化失败"),
+    DESERIALIZE_ERROR(500, 500_003, "反序列化失败");
 
     private final Integer httpStatus;
 

@@ -7,6 +7,7 @@ import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.common.TranscribeConst;
 import com.mars.auris.ai.transcribe.convert.TranscribeConvert;
 import com.mars.auris.ai.error.AIErrorCode;
+import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
 import com.mars.auris.ai.transcribe.model.LongTaskResp;
 import com.mars.auris.ai.transcribe.model.SubmitTaskResp;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
@@ -52,37 +53,64 @@ public class TranscribeService {
     @Autowired
     private EngineProperties properties;
 
+    @Autowired
+    private TranscribeRecordService recordService;
+
     /**
      * 同步返回
      */
-    public TranscribeResp transcribeSync(byte[] audio, String provider) {
+    public TranscribeResp transcribeSync(Long userId, byte[] audio, String provider) {
         EngineResp<AsrResultDTO> result = callEngine(() -> engineSubmit.post()
                 .uri(TranscribeConst.URL_ASR_TRANSCRIBE)
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(getMultipartBodyBuilder(audio, provider).build())
                 .retrieve()
-                .body(new ParameterizedTypeReference<EngineResp<AsrResultDTO>>() {}));
+                .body(new ParameterizedTypeReference<>() {
+                }));
+        recordService.saveTranscribeSyncResult(userId, result);
         return convert.to(result.getData());
     }
 
 
-    public SubmitTaskResp submitTask(byte[] audio, String provider) {
+    public SubmitTaskResp submitTask(Long userId, byte[] audio, String provider) {
         EngineResp<String> result = callEngine(() -> engineSubmit.post()
                 .uri(TranscribeConst.URL_ASR_TASK_START)
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(getMultipartBodyBuilder(audio, provider).build())
                 .retrieve()
-                .body(new ParameterizedTypeReference<EngineResp<String>>() {}));
-        return new SubmitTaskResp(result.getData());
+                .body(new ParameterizedTypeReference<>() {
+                }));
+        Long recordId = recordService.createTask(userId, result.getData());
+        return new SubmitTaskResp(String.valueOf(recordId));
     }
 
 
-    public LongTaskResp getTask(String taskId) {
+    public LongTaskResp getTask(Long userId, Long recordId) {
+        // 1. 先查DB，如果是终态，则直接返回，同时比较userId; 如果是非终态，继续查engine
+        TranscribeRecordDO record = recordService.findByUserIdAndRecordId(userId, recordId);
+        if (record == null) {
+            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
+        }
+        if (record.getStatus() != 0) {
+            // 终态(completed/failed)直接回源 DB,不再打 engine
+            return convert.to(record);
+        }
+
+
         EngineResp<AsrTaskDTO> result = callEngine(() -> enginePoll.get()
-                .uri(TranscribeConst.URL_ASR_TASK_GET + taskId)
+                .uri(TranscribeConst.URL_ASR_TASK_GET + record.getEngineTaskId())
                 .retrieve()
-                .body(new ParameterizedTypeReference<EngineResp<AsrTaskDTO>>() {}));
-        return convert.to(result.getData());
+                .body(new ParameterizedTypeReference<>() {
+                }));
+        if (TranscribeConst.ENGINE_STATUS_COMPLETED.equals(result.getData().getStatus())) {
+            recordService.complete(userId, record.getId(), result.getData());
+        } else if (TranscribeConst.ENGINE_STATUS_FAILED.equals(result.getData().getStatus())) {
+            recordService.fail(userId, record.getId(), result.getMessage());
+        }
+
+        LongTaskResp resp = convert.to(result.getData());
+        resp.setRecordId(String.valueOf(recordId));
+        return resp;
     }
 
 
@@ -141,7 +169,7 @@ public class TranscribeService {
             // body 不是 JSON(或读不出来):兜底用原始 body,抠不出来就 null
         }
         String body = e.getResponseBodyAsString();
-        return body == null || body.isEmpty() ? null : body;
+        return body.isEmpty() ? null : body;
     }
 
     /**

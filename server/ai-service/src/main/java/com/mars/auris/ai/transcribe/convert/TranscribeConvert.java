@@ -2,6 +2,8 @@
 // Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.ai.transcribe.convert;
 
+import com.mars.auris.ai.transcribe.common.TranscribeConst;
+import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
 import com.mars.auris.ai.transcribe.model.LongTaskResp;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
 import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
@@ -18,4 +20,23 @@ public interface TranscribeConvert {
     TranscribeResp to(AsrResultDTO dto);
 
     LongTaskResp to(AsrTaskDTO dto);
+
+    /**
+     * 终态记录回源:DB int 状态 → engine 字符串状态,对齐 AsrTaskDTO 的状态词
+     */
+    default LongTaskResp to(TranscribeRecordDO record) {
+        LongTaskResp resp = new LongTaskResp();
+        resp.setRecordId(String.valueOf(record.getId()));
+        resp.setProgress(1.0);
+        if (record.getStatus() == 1) {
+            resp.setStatus(TranscribeConst.ENGINE_STATUS_COMPLETED);
+            LongTaskResp.Result result = new LongTaskResp.Result();
+            result.setText(record.getText());
+            resp.setResult(result);
+        } else {
+            resp.setStatus(TranscribeConst.ENGINE_STATUS_FAILED);
+            resp.setErrorMsg(record.getErrorMsg());
+        }
+        return resp;
+    }
 }

@@ -13,6 +13,14 @@ public class AsrTaskDTO {
     @JsonProperty("task_id")
     private String taskId;
 
+    /**
+     * pending
+     * decoding
+     * segmenting
+     * transcribing
+     * completed
+     * failed
+     */
     private String status;
 
     private double progress;

@@ -15,5 +15,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class SubmitTaskResp {
 
-    private String taskId;
+    /**
+     * recordId(表主键)。字符串承载:雪花 19 位超出 JS 2^53,数字序列化尾数会变 0
+     */
+    private String recordId;
 }

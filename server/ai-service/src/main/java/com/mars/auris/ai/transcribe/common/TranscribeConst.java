@@ -13,4 +13,9 @@ public interface TranscribeConst {
     String URL_ASR_TASK_START = "/v1/asr/task/start";
 
     String URL_ASR_TASK_GET = "/v1/asr/task/";
+
+    /** engine 任务状态词,与 AsrTaskDTO.status 注释对齐 */
+    String ENGINE_STATUS_COMPLETED = "completed";
+
+    String ENGINE_STATUS_FAILED = "failed";
 }

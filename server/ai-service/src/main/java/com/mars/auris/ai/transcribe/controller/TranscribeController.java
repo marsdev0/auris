@@ -38,11 +38,12 @@ public class TranscribeController {
 
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<TranscribeResp> transcribe(@RequestParam("audio") MultipartFile audio,
+    public ApiResponse<TranscribeResp> transcribe(@AuthenticationPrincipal UserPrincipal user,
+                                                  @RequestParam("audio") MultipartFile audio,
                                                   @RequestParam(value = "provider", required = false) String provider) {
         try {
             byte[] bytes = audio.getBytes();
-            return ApiResponse.ok(transcribeService.transcribeSync(bytes, provider));
+            return ApiResponse.ok(transcribeService.transcribeSync(user.userId(), bytes, provider));
         } catch (IOException e) {
             log.error("transcribe error ", e);
             throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
@@ -56,18 +57,19 @@ public class TranscribeController {
         try {
             log.info("submitTask userId={}, provider={}", user.userId(),provider);
             byte[] bytes = audio.getBytes();
-            return ApiResponse.ok(transcribeService.submitTask(bytes, provider));
+            return ApiResponse.ok(transcribeService.submitTask(user.userId(), bytes, provider));
         } catch (IOException e) {
             log.error("submitTask error ", e);
             throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
         }
     }
 
-    @GetMapping("/task/{taskId}")
-    public ApiResponse<LongTaskResp> getTask(@PathVariable String taskId) {
+    @GetMapping("/task/{id}")
+    public ApiResponse<LongTaskResp> getTask(@AuthenticationPrincipal UserPrincipal user,
+                                             @PathVariable Long id) {
         // 异常映射在 Service 层完成,这里不 catch——
         // AurisException 会被 GlobalExceptionHandler 按映射后的状态码渲染
-        return ApiResponse.ok(transcribeService.getTask(taskId));
+        return ApiResponse.ok(transcribeService.getTask(user.userId(), id));
     }
 
 }

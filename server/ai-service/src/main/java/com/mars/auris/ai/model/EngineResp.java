@@ -18,4 +18,8 @@ public class EngineResp<T> {
     private String message;
 
     private T data;
+
+    public boolean isSuccess() {
+        return this.code == 0;
+    }
 }
