@@ -16,7 +16,7 @@ spring:
       port: 6379
 
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/auris?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://127.0.0.1:3306/auris?useUnicode=true&characterEncoding=utf-8&connectionTimeZone=UTC
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
