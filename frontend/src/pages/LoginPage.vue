@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { login, register, setToken, ApiError } from '../services/api'
+import { login, register, setToken, setProfile, ApiError } from '../services/api'
 
 const emit = defineEmits<{ logged: [] }>()
 
@@ -22,6 +22,11 @@ async function submit() {
     if (mode.value === 'login') {
       const r = await login(username.value, password.value)
       setToken(r.accessToken)
+      setProfile({
+        username: r.username ?? username.value,
+        nickname: r.nickname,
+        avatarUrl: r.avatarUrl,
+      })
       emit('logged')
     } else {
       await register(username.value, password.value, nickname.value || undefined)

@@ -8,6 +8,29 @@
  */
 
 const TOKEN_KEY = 'auris_token'
+const PROFILE_KEY = 'auris_profile'
+
+// ---------- 会话 profile(登录响应缓存,/me 未就绪时的降级数据源) ----------
+
+export interface UserProfile {
+  username: string
+  nickname?: string | null
+  avatarUrl?: string | null
+}
+
+export function getProfile(): UserProfile | null {
+  const raw = localStorage.getItem(PROFILE_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as UserProfile
+  } catch {
+    return null
+  }
+}
+
+export function setProfile(p: UserProfile) {
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(p))
+}
 
 export interface ApiResponse<T> {
   code: number
@@ -27,6 +50,46 @@ export function setToken(token: string) {
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(PROFILE_KEY)
+}
+
+/** 从 JWT payload 解 username(展示用途,无需验签;token 里只有 username,无昵称/注册时间) */
+export function decodeUsername(): string | null {
+  const token = getToken()
+  if (!token) return null
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return typeof payload.username === 'string' ? payload.username : null
+  } catch {
+    return null
+  }
+}
+
+// ---------- 个人信息 ----------
+
+export interface MeResp {
+  username: string
+  nickname?: string | null
+  avatarUrl?: string | null
+  createdAt?: string | null // UTC 无后缀
+}
+
+/**
+ * GET /v1/auth/me —— 后端接口就绪前的降级链:
+ * /me 接口 > 登录时缓存的 profile(含昵称/头像) > JWT payload 的 username。
+ * 后端补上 /me 后此函数无需改动,自动点亮。
+ */
+export async function getMe(): Promise<MeResp> {
+  try {
+    return await request<MeResp>('/v1/auth/me')
+  } catch {
+    const cached = getProfile()
+    return {
+      username: cached?.username ?? decodeUsername() ?? '未知用户',
+      nickname: cached?.nickname ?? null,
+      avatarUrl: cached?.avatarUrl ?? null,
+    }
+  }
 }
 
 // ---------- 时间:UTC → 本地 ----------
@@ -84,6 +147,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export interface LoginResp {
   accessToken: string
   refreshToken?: string
+  username?: string
+  nickname?: string | null
+  avatarUrl?: string | null
 }
 
 /** POST /v1/transcribe/task/start 的响应 —— recordId 是 String,严禁转 Number */

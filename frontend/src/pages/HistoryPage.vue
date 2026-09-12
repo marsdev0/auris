@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { getRecords, deleteRecord, getRecord, fmtUtc, fmtDuration, type RecordItem, type RecordDetail, ApiError } from '../services/api'
 
+const emit = defineEmits<{ back: [] }>()
+
 const items = ref<RecordItem[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -74,7 +76,10 @@ function statusClass(s: string) {
 <template>
   <div class="max-w-3xl mx-auto space-y-4">
     <div class="flex items-center justify-between">
-      <h2 class="text-xl font-semibold">我的转写</h2>
+      <div class="flex items-center gap-3">
+        <button class="text-sm text-gray-500 hover:text-gray-800" @click="emit('back')">← 返回</button>
+        <h2 class="text-xl font-semibold">我的转写</h2>
+      </div>
       <button class="text-sm text-blue-600 hover:underline" @click="load">刷新</button>
     </div>
 

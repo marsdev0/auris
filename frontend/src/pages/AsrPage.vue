@@ -117,87 +117,85 @@ const phaseLabel: Record<Phase, string> = {
 </script>
 
 <template>
-  <div class="min-h-screen bg-auris-base text-auris-text">
-    <div class="mx-auto max-w-3xl px-6 py-12">
-      <header class="mb-10">
-        <h1 class="text-2xl font-bold tracking-tight">auris · 实时语音识别</h1>
-        <p class="mt-2 text-sm text-auris-text-secondary">
-          上传音频文件,按实时节奏推流至 engine(provider:
-          <code class="rounded bg-auris-elevated px-1.5 py-0.5 text-auris-accent">{{ PROVIDER }}</code
-          >),识别结果边说边出。
-        </p>
-      </header>
-
-      <!-- 上传区 -->
-      <div
-        v-if="phase === 'idle'"
-        class="rounded-xl border-2 border-dashed border-auris-border p-10 text-center transition-colors hover:border-auris-accent"
-        @click="fileInput?.click()"
-      >
-        <p class="text-auris-text-secondary">点击选择音频文件</p>
-        <p class="mt-1 text-xs text-auris-text-muted">wav / mp3 / m4a / ogg,任意时长</p>
-        <input
-          ref="fileInput"
-          type="file"
-          accept="audio/*"
-          class="hidden"
-          @change="onFileChosen"
-        />
-      </div>
-
-      <!-- 状态条 -->
-      <div v-else class="mb-4 flex items-center justify-between rounded-lg bg-auris-surface px-4 py-3 text-sm">
-        <div class="flex items-center gap-3">
-          <span
-            class="inline-block size-2 rounded-full"
-            :class="{
-              'bg-auris-accent animate-pulse': phase === 'decoding' || phase === 'streaming',
-              'bg-auris-success': phase === 'done',
-              'bg-auris-danger': phase === 'error',
-            }"
-          />
-          <span class="font-medium">{{ phaseLabel[phase] }}</span>
-          <span class="text-auris-text-muted">{{ fileName }}</span>
-        </div>
-        <div class="flex items-center gap-4 text-auris-text-secondary">
-          <span>partial {{ stats.partials }}</span>
-          <span>final {{ stats.finals }}</span>
-          <span v-if="stats.firstCharMs">首字 {{ (stats.firstCharMs / 1000).toFixed(2) }}s</span>
-        </div>
-      </div>
-
-      <!-- 错误 -->
-      <div v-if="phase === 'error'" class="rounded-lg border border-auris-danger/40 bg-red-950/30 px-4 py-3 text-sm text-red-300">
-        {{ errorMsg }}
-      </div>
-
-      <!-- 转写区 -->
-      <div
-        v-if="phase !== 'idle'"
-        ref="transcriptEl"
-        class="max-h-[50vh] overflow-y-auto rounded-xl border border-auris-border bg-auris-surface p-6 leading-loose"
-      >
-        <template v-if="finals.length || currentText">
-          <p v-for="(f, i) in finals" :key="i" class="text-auris-text">
-            {{ f.text }}
-          </p>
-          <p v-if="currentText" class="text-auris-text-secondary">
-            {{ currentText }}<span class="ml-0.5 animate-pulse text-auris-accent">▌</span>
-          </p>
-        </template>
-        <p v-else class="text-auris-text-muted">
-          {{ phase === 'streaming' ? '等待首个识别结果…' : '' }}
-        </p>
-      </div>
-
-      <!-- 重来 -->
-      <button
-        v-if="phase === 'done' || phase === 'error'"
-        class="mt-6 rounded-lg bg-auris-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-auris-accent/80"
-        @click="reset"
-      >
-        再来一个
-      </button>
+  <div class="max-w-3xl mx-auto space-y-6">
+    <div>
+      <h2 class="text-xl font-semibold">实时语音识别</h2>
+      <p class="mt-1 text-sm text-gray-500">
+        上传音频文件,按实时节奏推流至 engine(provider:
+        <code class="rounded bg-gray-100 px-1.5 py-0.5 text-blue-600">{{ PROVIDER }}</code
+        >),识别结果边说边出。
+      </p>
     </div>
+
+    <!-- 上传区 -->
+    <div
+      v-if="phase === 'idle'"
+      class="bg-white rounded-xl shadow p-10 text-center border-2 border-dashed border-gray-300 transition-colors hover:border-blue-400 cursor-pointer"
+      @click="fileInput?.click()"
+    >
+      <p class="text-gray-500">点击选择音频文件</p>
+      <p class="mt-1 text-xs text-gray-400">wav / mp3 / m4a / ogg,任意时长</p>
+      <input
+        ref="fileInput"
+        type="file"
+        accept="audio/*"
+        class="hidden"
+        @change="onFileChosen"
+      />
+    </div>
+
+    <!-- 状态条 -->
+    <div v-else class="bg-white rounded-xl shadow px-4 py-3 text-sm flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span
+          class="inline-block size-2 rounded-full"
+          :class="{
+            'bg-blue-500 animate-pulse': phase === 'decoding' || phase === 'streaming',
+            'bg-green-500': phase === 'done',
+            'bg-red-500': phase === 'error',
+          }"
+        />
+        <span class="font-medium text-gray-800">{{ phaseLabel[phase] }}</span>
+        <span class="text-gray-400">{{ fileName }}</span>
+      </div>
+      <div class="flex items-center gap-4 text-gray-500">
+        <span>partial {{ stats.partials }}</span>
+        <span>final {{ stats.finals }}</span>
+        <span v-if="stats.firstCharMs">首字 {{ (stats.firstCharMs / 1000).toFixed(2) }}s</span>
+      </div>
+    </div>
+
+    <!-- 错误 -->
+    <div v-if="phase === 'error'" class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
+      {{ errorMsg }}
+    </div>
+
+    <!-- 转写区 -->
+    <div
+      v-if="phase !== 'idle'"
+      ref="transcriptEl"
+      class="max-h-[50vh] overflow-y-auto bg-white rounded-xl shadow p-6 leading-loose"
+    >
+      <template v-if="finals.length || currentText">
+        <p v-for="(f, i) in finals" :key="i" class="text-gray-800">
+          {{ f.text }}
+        </p>
+        <p v-if="currentText" class="text-gray-500">
+          {{ currentText }}<span class="ml-0.5 animate-pulse text-blue-600">▌</span>
+        </p>
+      </template>
+      <p v-else class="text-gray-400">
+        {{ phase === 'streaming' ? '等待首个识别结果…' : '' }}
+      </p>
+    </div>
+
+    <!-- 重来 -->
+    <button
+      v-if="phase === 'done' || phase === 'error'"
+      class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+      @click="reset"
+    >
+      再来一个
+    </button>
   </div>
 </template>
