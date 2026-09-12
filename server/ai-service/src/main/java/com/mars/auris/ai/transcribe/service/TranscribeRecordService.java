@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mars.auris.ai.config.TranscribeProperties;
 import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
+import com.mars.auris.ai.transcribe.common.TranscribeConst;
 import com.mars.auris.ai.transcribe.mapper.TranscribeRecordMapper;
 import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
 import com.mars.auris.ai.transcribe.model.engine.AsrSegment;
@@ -37,7 +38,7 @@ public class TranscribeRecordService {
         try {
             TranscribeRecordDO item = new TranscribeRecordDO();
             item.setUserId(userId);
-            item.setSource(1);
+            item.setSource(TranscribeConst.SOURCE_UPLOAD_SYNC);
             item.setText(result.getData().getText());
             item.setStatus(1);
             List<AsrSegment> segments = result.getData().getSegments();
@@ -53,10 +54,12 @@ public class TranscribeRecordService {
         }
     }
 
-    public Long createTask(Long userId, String engineTaskId) {
+    public Long createTask(Long userId, String engineTaskId, int source, String title) {
         TranscribeRecordDO item = new TranscribeRecordDO();
         item.setUserId(userId);
         item.setEngineTaskId(engineTaskId);
+        item.setSource(source);
+        item.setTitle(title);
         item.setStatus(0);
 
         try {
@@ -76,11 +79,13 @@ public class TranscribeRecordService {
     }
 
     public void complete(Long userId, Long id, AsrTaskDTO result) {
-        recordMapper.complete(id, userId, result.getResult().getText());
+        // 防御:engine 返回 completed 但 result 缺失时不 NPE,text 落 null
+        String text = result.getResult() != null ? result.getResult().getText() : null;
+        recordMapper.complete(id, userId, text, result.getTitle());
     }
 
-    public void fail(Long userId, Long id, String errorMsg) {
-        recordMapper.fail(id, userId, errorMsg);
+    public void fail(Long userId, Long id, String errorMsg, String title) {
+        recordMapper.fail(id, userId, errorMsg, title);
     }
 
     public TranscribeRecordDO findByUserIdAndRecordId(Long userId, Long id) {

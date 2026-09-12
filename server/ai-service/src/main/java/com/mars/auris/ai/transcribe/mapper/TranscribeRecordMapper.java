@@ -32,13 +32,15 @@ public interface TranscribeRecordMapper extends BaseMapper<TranscribeRecordDO> {
             "ORDER BY created_at DESC, id DESC")
     Page<TranscribeRecordDO> pageByUserId(Page<TranscribeRecordDO> page, @Param("userId") Long userId);
 
-    @Update("UPDATE transcribe_record SET text = #{text}, status = 1 " +
+    @Update("UPDATE transcribe_record SET text = #{text}, title = #{title}, status = 1 " +
             "WHERE id = #{id} AND user_id = #{userId} AND status = 0")
-    int complete(@Param("id") Long id, @Param("userId") Long userId, @Param("text") String text);
+    int complete(@Param("id") Long id, @Param("userId") Long userId,
+                 @Param("text") String text, @Param("title") String title);
 
-    @Update("UPDATE transcribe_record SET error_msg = #{errorMsg}, status = 2 " +
+    @Update("UPDATE transcribe_record SET error_msg = #{errorMsg}, title = #{title}, status = 2 " +
             "WHERE id = #{id} AND user_id = #{userId} AND status = 0")
-    int fail(@Param("id") Long id, @Param("userId") Long userId, @Param("errorMsg") String errorMsg);
+    int fail(@Param("id") Long id, @Param("userId") Long userId,
+             @Param("errorMsg") String errorMsg, @Param("title") String title);
 
 
     @Delete("DELETE FROM transcribe_record WHERE id = #{id} AND user_id = #{userId}")

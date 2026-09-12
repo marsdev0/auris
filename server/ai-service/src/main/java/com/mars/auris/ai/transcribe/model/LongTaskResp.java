@@ -17,6 +17,11 @@ public class LongTaskResp {
 
     private String status;
 
+    /**
+     * 单集/视频标题(URL 链路下载完成后有值,轮询期间随行可见)
+     */
+    private String title;
+
     private double progress;
 
     private Result result;

@@ -28,6 +28,7 @@ public interface TranscribeConvert {
     default LongTaskResp to(TranscribeRecordDO record) {
         LongTaskResp resp = new LongTaskResp();
         resp.setRecordId(String.valueOf(record.getId()));
+        resp.setTitle(record.getTitle());
         resp.setProgress(1.0);
         if (record.getStatus() == 1) {
             resp.setStatus(TranscribeConst.ENGINE_STATUS_COMPLETED);
@@ -48,7 +49,7 @@ public interface TranscribeConvert {
         // DB int 0/1/2 → 状态词,与轮询响应对齐
         item.setStatus(record.getStatus() == 1 ? TranscribeConst.ENGINE_STATUS_COMPLETED
                 : record.getStatus() == 2 ? TranscribeConst.ENGINE_STATUS_FAILED
-                : "transcribing");
+                : TranscribeConst.ENGINE_STATUS_TRANSCRIBING);
         item.setDurationMs(record.getDurationMs());
         item.setCreatedAt(record.getCreatedAt());
         return item;

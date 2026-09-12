@@ -33,6 +33,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -77,7 +78,7 @@ public class TranscribeService {
     }
 
 
-    public SubmitTaskResp submitTask(Long userId, byte[] audio, String provider) {
+    public SubmitTaskResp submitTask(Long userId, byte[] audio, String provider, String originalFilename) {
         EngineResp<String> result = callEngine(() -> engineSubmit.post()
                 .uri(TranscribeConst.URL_ASR_TASK_START)
                 .contentType(MediaType.MULTIPART_FORM_DATA)
@@ -85,8 +86,33 @@ public class TranscribeService {
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {
                 }));
-        Long recordId = recordService.createTask(userId, result.getData());
+        Long recordId = recordService.createTask(userId, result.getData(),
+                TranscribeConst.SOURCE_UPLOAD_ASYNC, basename(originalFilename));
         return new SubmitTaskResp(String.valueOf(recordId));
+    }
+
+    public SubmitTaskResp submitUrl(Long userId, String url) {
+        EngineResp<String> result = callEngine(() -> engineSubmit.post()
+                .uri(TranscribeConst.URL_ASR_TASK_START_URL)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("url", url))                 // provider 用默认,不透出
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {
+                }));
+        // URL 链路 title 由下载完成后回填,插入时为空
+        Long recordId = recordService.createTask(userId, result.getData(), TranscribeConst.SOURCE_URL, null);
+        return new SubmitTaskResp(String.valueOf(recordId));
+    }
+
+    /**
+     * 上传文件的展示名:originalFilename 的 basename,截断 256(原始值可能带路径/超长/为 null)
+     */
+    private String basename(String originalFilename) {
+        if (originalFilename == null || originalFilename.isBlank()) {
+            return null;
+        }
+        String name = originalFilename.substring(Math.max(originalFilename.lastIndexOf('/'), originalFilename.lastIndexOf('\\')) + 1);
+        return name.length() > 256 ? name.substring(0, 256) : name;
     }
 
 
@@ -111,18 +137,21 @@ public class TranscribeService {
                     }));
         } catch (AurisException e) {
             if (Objects.equals(e.getCode(), AIErrorCode.TASK_NOT_FOUND.getCode())) {
-                recordService.fail(userId, record.getId(), e.getMsg());
+                recordService.fail(userId, record.getId(), e.getMsg(), null);
             }
             throw e;
         }
         if (TranscribeConst.ENGINE_STATUS_COMPLETED.equals(result.getData().getStatus())) {
             recordService.complete(userId, record.getId(), result.getData());
         } else if (TranscribeConst.ENGINE_STATUS_FAILED.equals(result.getData().getStatus())) {
-            recordService.fail(userId, record.getId(), result.getMessage());
+            // 失败原因的正主来源是任务详情的 error 字段(EngineResp.message 轮询成功时恒空)
+            recordService.fail(userId, record.getId(), result.getData().getError(), result.getData().getTitle());
         }
 
         LongTaskResp resp = convert.to(result.getData());
         resp.setRecordId(String.valueOf(recordId));
+        // error → errorMsg 字段不同名,MapStruct 不映射,轮询发现失败的那次响应也要能看到原因
+        resp.setErrorMsg(result.getData().getError());
         return resp;
     }
 

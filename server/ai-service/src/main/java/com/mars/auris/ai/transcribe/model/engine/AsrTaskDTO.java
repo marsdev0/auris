@@ -15,6 +15,7 @@ public class AsrTaskDTO {
 
     /**
      * pending
+     * downloading
      * decoding
      * segmenting
      * transcribing
@@ -27,6 +28,12 @@ public class AsrTaskDTO {
 
     private Result result;
 
+    private String title;
+
+    /**
+     * engine 任务失败原因(failed 时有值,回填 record.error_msg 的正主来源)
+     */
+    private String error;
 
     @Data
     public static class Result {

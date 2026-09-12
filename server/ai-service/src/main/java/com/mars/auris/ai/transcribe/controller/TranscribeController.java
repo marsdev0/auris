@@ -7,6 +7,7 @@ import com.mars.auris.ai.transcribe.model.PageResp;
 import com.mars.auris.ai.transcribe.model.RecordItemResp;
 import com.mars.auris.ai.transcribe.model.SubmitTaskResp;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
+import com.mars.auris.ai.transcribe.model.UrlSubmitReq;
 import com.mars.auris.ai.transcribe.service.TranscribeService;
 import com.mars.auris.common.auth.UserPrincipal;
 import com.mars.auris.common.error.AurisException;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -60,7 +62,7 @@ public class TranscribeController {
         try {
             log.info("submitTask userId={}, provider={}", user.userId(), provider);
             byte[] bytes = audio.getBytes();
-            return ApiResponse.ok(transcribeService.submitTask(user.userId(), bytes, provider));
+            return ApiResponse.ok(transcribeService.submitTask(user.userId(), bytes, provider, audio.getOriginalFilename()));
         } catch (IOException e) {
             log.error("submitTask error ", e);
             throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
@@ -87,6 +89,15 @@ public class TranscribeController {
                                                             @RequestParam(value = "page", defaultValue = "1") int page,
                                                             @RequestParam(value = "size", defaultValue = "10") int size) {
         return ApiResponse.ok(transcribeService.getRecords(user.userId(), page, size));
+    }
+
+    @PostMapping("/url")
+    public ApiResponse<SubmitTaskResp> submitUrl(@AuthenticationPrincipal UserPrincipal user,
+                                                 @RequestBody UrlSubmitReq req) {
+        if (req.getUrl() == null || req.getUrl().isBlank()) {
+            throw new AurisException(CommonErrorCode.BAD_REQUEST);
+        }
+        return ApiResponse.ok(transcribeService.submitUrl(user.userId(), req.getUrl()));
     }
 
 }
