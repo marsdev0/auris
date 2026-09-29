@@ -238,3 +238,39 @@ export async function getRecords(page: number, size: number): Promise<PageResp<R
 export async function deleteRecord(recordId: string): Promise<void> {
   await request<null>(`/v1/transcribe/records/${recordId}`, { method: 'DELETE' })
 }
+
+// ---------- 通知(P5 通知服务:红点轮询 + 列表 + 已读) ----------
+
+/**
+ * GET /v1/notification 的条目。
+ * <p>
+ * id 是雪花转 String(同 recordId 铁律 1);createdAt 是 UTC 无后缀(铁律 2)。
+ */
+export interface NoticeItem {
+  id: string
+  type: string
+  title: string | null
+  content: string | null
+  readFlag: number // 0-未读 1-已读
+  createdAt: string
+}
+
+/** 未读数(红点 30s 轮询;失败时调用方静默,红点不亮) */
+export async function unreadCount(): Promise<number> {
+  return request<number>('/v1/notification/unread-count')
+}
+
+/** 通知列表(最新在前,后端上限 100) */
+export async function listNotifications(limit = 50): Promise<NoticeItem[]> {
+  return request<NoticeItem[]>(`/v1/notification?limit=${limit}`)
+}
+
+/** 单条标已读 */
+export async function markNoticeRead(id: string): Promise<boolean> {
+  return request<boolean>(`/v1/notification/${id}/read`, { method: 'PUT' })
+}
+
+/** 全部已读,返回影响行数 */
+export async function markAllNoticesRead(): Promise<number> {
+  return request<number>('/v1/notification/read-all', { method: 'PUT' })
+}
