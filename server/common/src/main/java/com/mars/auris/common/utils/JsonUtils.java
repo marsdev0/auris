@@ -1,6 +1,7 @@
 package com.mars.auris.common.utils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.mars.auris.common.error.AurisException;
 import com.mars.auris.common.error.CommonErrorCode;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +13,12 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class JsonUtils {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    /**
+     * 注册 JavaTimeModule:LocalDateTime 等时间类型默认不支持,
+     * Kafka 事件里带 occurred_at 的消息曾因此整条毒丸(2026-09-29 端到端首跑暴露)。
+     */
+    private static final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule());
 
     public static String toJson(Object obj) {
         try {
