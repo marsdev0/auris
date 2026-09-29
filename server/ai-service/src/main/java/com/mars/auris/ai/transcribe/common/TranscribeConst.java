@@ -34,4 +34,14 @@ public interface TranscribeConst {
     int SOURCE_UPLOAD_SYNC = 1;    // 文件上传 → 同步直返
 
     int SOURCE_URL = 2;            // URL 链接 → 异步任务
+
+    String EVENT_AURIS = "auris-event";
+
+    String EVENT_AURIS_NOTIFY_DELIVERY_EMAIL = "auris-notify-delivery-email";
+
+    String EVENT_AURIS_NOTIFY_DELIVERY_INAPP = "auris-notify-delivery-inapp";
+
+    String EVENT_AURIS_NOTIFY_DELIVERY_FEISHU = "auris-notify-delivery-feishu";
+
+    String EVENT_AURIS_NOTIFY_DLQ = "auris-notify-dlq";
 }

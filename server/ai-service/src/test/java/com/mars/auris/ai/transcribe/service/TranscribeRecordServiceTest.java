@@ -6,6 +6,7 @@ import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.common.TranscribeConst;
 import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
 import com.mars.auris.ai.transcribe.mapper.TranscribeRecordMapper;
+import com.mars.auris.ai.transcribe.producer.TranscribeEventProducer;
 import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
 import com.mars.auris.ai.transcribe.model.engine.AsrTaskDTO;
 import com.mars.auris.common.error.AurisException;
@@ -17,6 +18,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -46,6 +49,9 @@ class TranscribeRecordServiceTest {
 
     @Mock
     private TranscribeProperties transcribeProperties;
+
+    @Mock
+    private TranscribeEventProducer eventProducer;
 
     @InjectMocks
     private TranscribeRecordService recordService;
@@ -157,14 +163,21 @@ class TranscribeRecordServiceTest {
         assertEquals(false, recordService.deleteByUserIdAndRecordId(1L, 9L));
     }
 
-    // ========== failTimeout:定时兜底透传 cutoff 与文案 ==========
+    // ========== failTimeout:逐条标失败 + 发事件(Step2 改造后的新语义) ==========
 
     @Test
-    void failTimeout_delegatesCutoffAndMsg() {
+    void failTimeout_marksEachAndPublishesEvent() {
         when(transcribeProperties.getTimeoutHours()).thenReturn(2);
-        when(recordMapper.failTimeout(any(), anyString())).thenReturn(3);
+        TranscribeRecordDO r = new TranscribeRecordDO();
+        r.setId(9L); r.setUserId(7L); r.setTitle("超时单集");
+        when(recordMapper.selectTimeoutRecords(any())).thenReturn(List.of(r));
+
         int n = recordService.failTimeoutRecords();
-        assertEquals(3, n);
-        verify(recordMapper).failTimeout(any(), eq("转写超时未完成"));
+
+        assertEquals(1, n);
+        // 逐条走 fail():status=0 条件与轮询回填互斥
+        verify(recordMapper).fail(9L, 7L, "转写超时未完成", "超时单集");
+        // 每条发 auris-event(超时也是终态,通知要触达)
+        verify(eventProducer).publishTranscribeTerminal(7L, 9L, "超时单集", "timeout");
     }
 }

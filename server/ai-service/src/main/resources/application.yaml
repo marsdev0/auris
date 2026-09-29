@@ -23,6 +23,13 @@ spring:
       max-request-size: 10MB # 整个请求最大size
       file-size-threshold: 0 # 直接落临时文件，不占堆，转发时流式读盘
 
+  kafka:
+    bootstrap-servers: localhost:9092   # HOST listener(compose 的 INTERNAL 是容器网用)
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all                        # 事件不丢:全部 ISR 确认(单副本下即落盘)
+
 engine:
   base-url: http://127.0.0.1:18000
   provider: qwen3-asr

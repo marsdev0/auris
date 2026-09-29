@@ -15,6 +15,7 @@ import com.mars.auris.ai.transcribe.model.RecordItemResp;
 import com.mars.auris.ai.transcribe.model.SubmitTaskResp;
 import com.mars.auris.ai.transcribe.model.TranscribeResp;
 import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
+import com.mars.auris.ai.transcribe.producer.TranscribeEventProducer;
 import com.mars.auris.ai.transcribe.model.engine.AsrTaskDTO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,6 +62,9 @@ public class TranscribeService {
 
     @Autowired
     private TranscribeRecordService recordService;
+
+    @Autowired
+    private TranscribeEventProducer eventProducer;
 
     /**
      * 同步返回
@@ -138,14 +142,17 @@ public class TranscribeService {
         } catch (AurisException e) {
             if (Objects.equals(e.getCode(), AIErrorCode.TASK_NOT_FOUND.getCode())) {
                 recordService.fail(userId, record.getId(), e.getMsg(), null);
+                eventProducer.publishTranscribeTerminal(userId, record.getId(), null, "timeout");
             }
             throw e;
         }
         if (TranscribeConst.ENGINE_STATUS_COMPLETED.equals(result.getData().getStatus())) {
             recordService.complete(userId, record.getId(), result.getData());
+            eventProducer.publishTranscribeTerminal(userId, record.getId(), result.getData().getTitle(), "completed");
         } else if (TranscribeConst.ENGINE_STATUS_FAILED.equals(result.getData().getStatus())) {
             // 失败原因的正主来源是任务详情的 error 字段(EngineResp.message 轮询成功时恒空)
             recordService.fail(userId, record.getId(), result.getData().getError(), result.getData().getTitle());
+            eventProducer.publishTranscribeTerminal(userId, record.getId(), result.getData().getTitle(), "failed");
         }
 
         LongTaskResp resp = convert.to(result.getData());

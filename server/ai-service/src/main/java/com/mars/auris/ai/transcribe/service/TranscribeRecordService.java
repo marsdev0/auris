@@ -6,6 +6,7 @@ import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
 import com.mars.auris.ai.transcribe.common.TranscribeConst;
 import com.mars.auris.ai.transcribe.mapper.TranscribeRecordMapper;
+import com.mars.auris.ai.transcribe.producer.TranscribeEventProducer;
 import com.mars.auris.ai.transcribe.model.engine.AsrResultDTO;
 import com.mars.auris.ai.transcribe.model.engine.AsrSegment;
 import com.mars.auris.ai.transcribe.model.engine.AsrTaskDTO;
@@ -30,6 +31,9 @@ public class TranscribeRecordService {
 
     @Autowired
     private TranscribeRecordMapper recordMapper;
+
+    @Autowired
+    private TranscribeEventProducer eventProducer;
 
     @Autowired
     private TranscribeProperties transcribeProperties;
@@ -105,10 +109,15 @@ public class TranscribeRecordService {
 
     public int failTimeoutRecords() {
         LocalDateTime cutoff = LocalDateTime.now().minusHours(transcribeProperties.getTimeoutHours());
-        int n = recordMapper.failTimeout(cutoff, "转写超时未完成");
-        if (n > 0) {
-            log.warn("定时兜底:超 {}h 未完成,标 failed {} 条", transcribeProperties.getTimeoutHours(), n);
+        List<TranscribeRecordDO> records = recordMapper.selectTimeoutRecords(cutoff);
+        for (TranscribeRecordDO r : records) {
+            // 逐条走 fail():带 status=0 条件,与轮询回填天然互斥(P3 §2.4)
+            fail(r.getUserId(), r.getId(), "转写超时未完成", r.getTitle());
+            eventProducer.publishTranscribeTerminal(r.getUserId(), r.getId(), r.getTitle(), "timeout");
         }
-        return n;
+        if (!records.isEmpty()) {
+            log.warn("定时兜底:超 {}h 未完成,标 failed {} 条", transcribeProperties.getTimeoutHours(), records.size());
+        }
+        return records.size();
     }
 }
