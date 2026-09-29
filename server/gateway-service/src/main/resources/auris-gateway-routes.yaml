@@ -20,3 +20,7 @@ spring:
               uri: lb://user-service        # 登录/注册入口;防爆破限流后续按用户名维度加
               predicates:
                 - Path=/v1/auth/**
+            - id: push-service
+              uri: lb://push-service        # 通知读取(红点轮询 30s 一次/用户,量小暂不限流);DLQ 运维接口后续加内部认证
+              predicates:
+                - Path=/v1/notification/**
