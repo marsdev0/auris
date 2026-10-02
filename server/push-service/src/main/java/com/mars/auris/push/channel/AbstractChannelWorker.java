@@ -1,6 +1,7 @@
 package com.mars.auris.push.channel;
 
 import com.mars.auris.common.utils.JsonUtils;
+import com.mars.auris.push.common.Delivery;
 import com.mars.auris.push.entity.DeliveryDO;
 import com.mars.auris.push.entity.NoticeDO;
 import com.mars.auris.push.mapper.DeliveryMapper;
@@ -38,6 +39,14 @@ public abstract class AbstractChannelWorker {
         if (deliveryDO == null) {
             // 行不存在(已清理/消息不合法),同样不可恢复,跳过
             log.error("delivery 不存在,跳过: deliveryId={}", task.getDeliveryId());
+            ack.acknowledge();
+            return;
+        }
+        if (deliveryDO.getStatus() != Delivery.PENDING.getCode()
+                && deliveryDO.getStatus() != Delivery.SENDING.getCode()) {
+            // 只有这两种状态可以往渠道发消息
+            log.info("行已非在途,跳过: deliveryId={}, status={}",
+                    deliveryDO.getId(), deliveryDO.getStatus());
             ack.acknowledge();
             return;
         }

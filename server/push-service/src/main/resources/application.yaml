@@ -27,10 +27,12 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
       acks: all                         # 与 ai-service 同款:投递指令不丢
-    consumer:                           # EventConsumer / InAppWorker(manualAckFactory 手动 ack)
+    consumer:                           # EventConsumer / InAppWorker / FeishuWorker(manualAckFactory 手动 ack)
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: earliest       # 新消费组从头消费,启动前的存量事件不漏(at-least-once 的起点)
+      max-poll-records: 100             # FeishuWorker 阻塞限速(90/min)下单批最长 ~66s,
+                                        # 须留足 max.poll.interval(默认 5min) 余量,防 rebalance
 
 mybatis-plus:
   configuration:
@@ -43,3 +45,7 @@ auris:
   jwt:
     access-token-secret: ${JWT_ACCESS_SECRET:auris-access-secret-key-2026-change-in-prod}
     issuer: auris
+  push:
+    feishu:
+      webhook-url: ""                   # 留空=渠道未开通(发送即抛→退避/DLQ);真实 webhook 由 Nacos auris-push.yaml 覆盖
+      rate-per-minute: 90               # 飞书硬限 ~100/min,留余量(P5 §2.7 出口阀)
