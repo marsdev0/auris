@@ -1,6 +1,5 @@
 package com.mars.auris.ai.transcribe.producer;
 
-import com.mars.auris.ai.transcribe.common.TranscribeConst;
 import com.mars.auris.common.utils.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +19,8 @@ import java.util.UUID;
 @Component
 public class TranscribeEventProducer {
 
+    private static final String EVENT_AURIS = "auris-event";
+
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
 
@@ -35,7 +36,7 @@ public class TranscribeEventProducer {
                         "title", title != null ? title : "",
                         "status", status));
         try {
-            kafkaTemplate.send(TranscribeConst.EVENT_AURIS, eventId, JsonUtils.toJson(body));
+            kafkaTemplate.send(EVENT_AURIS, eventId, JsonUtils.toJson(body));
         } catch (Exception e) {
             log.error("事件发布失败(通知将缺席): recordId={}, type=transcribe.{}", recordId, status, e);
         }
