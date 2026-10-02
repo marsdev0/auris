@@ -1,6 +1,6 @@
 # auris
 
-**English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
+**English** | [简体中文](README.zh-CN.md)
 
 **auris** (Latin for "ear") is an open-source speech-to-text workbench that turns audio into searchable, shareable text. From multi-source ingestion — file uploads, direct links, Bilibili videos, Xiaoyuzhou podcasts — through pluggable ASR engines, all the way to in-app notification delivery, it provides an end-to-end transcription pipeline.
 
