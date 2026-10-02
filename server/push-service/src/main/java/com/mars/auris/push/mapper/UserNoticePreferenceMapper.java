@@ -15,6 +15,6 @@ public interface UserNoticePreferenceMapper extends BaseMapper<UserNoticePrefere
 
     @Select("SELECT IFNULL(" +
             "(SELECT IF(enabled = 0, 0, channel_mask) FROM user_notice_preference WHERE user_id = #{userId} AND type = #{type}), " +
-            "7)")
+            "1)")
     Integer selectMask(@Param("userId") Long userId, @Param("type") String type);
 }
