@@ -32,7 +32,7 @@ public class DeliveryDO {
     private String channel;
 
     /**
-     * 0-running占位 1-sent 2-retrying 3-sending认领中 4-failed_dq死信
+     * 0-pending占位 1-sent 2-backoff 3-sending认领中 4-failed_dq死信
      */
     private Integer status;
 
@@ -42,7 +42,7 @@ public class DeliveryDO {
     private Integer attempt;
 
     /**
-     * 下次重试时间(UTC;retrying 时非空,RetryScanner 扫描键;delivery 表即延迟队列)
+     * 下次重试时间(UTC;backoff 时非空,RetryScanner 扫描键;delivery 表即延迟队列)
      */
     private LocalDateTime nextRetryAt;
 

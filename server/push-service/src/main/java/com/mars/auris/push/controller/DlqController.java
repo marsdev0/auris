@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -40,17 +41,15 @@ public class DlqController {
     }
 
     /**
-     * 【核心层 · 由你写】死信重投:把一条 failed_dq 的投递复活
+     * 死信重投:把一条 failed_dq 的投递复活(4→2, attempt=0, next_retry_at=now)
      */
     @PostMapping("/{id}/requeue")
     public ApiResponse<Boolean> requeue(@PathVariable("id") Long id) {
-        // TODO@geyan 核心层:状态迁移 4(FAILED_DQ) → 2(RETRYING),attempt 清零,
-        //  next_retry_at 置为"立刻可重试",再把投递消息发回原渠道 topic(auris-notify-delivery-{channel})。
-        //  要点:
-        //  1. DeliveryMapper 还没有 requeue 方法——自己加,注意 WHERE 条件为什么要限定 status=4(CAS);
-        //  2. 发回 topic 时 attempt 传什么?和 RetryScanner.retryDue 的重投消息有什么区别?
-        //  3. 想想:requeue 之后,这条消息是谁捞起来发的(RetryScanner 还是渠道 Worker)?
-        //  设计参考:P5 方案 §1.5 ⑥。
-        throw new UnsupportedOperationException("TODO@geyan: requeue 未实现");
+        // 决策(P5 §1.5 ⑥ 基线的偏差,偏差记 §9):只拨状态、不发渠道 topic——
+        // 直发时行 status=2,Worker 的 markSent WHERE IN (0,3) 闭合不了,且 30s 内 Scanner
+        // 还会再捞再发(双发);拨回 2 后下一轮(≤30s)RetryScanner 认领重发,闭合顺畅。
+        // WHERE 限定 id + status=4 即 CAS:重复点击/并发 requeue 只有第一次生效,天然幂等。
+        int requeue = deliveryMapper.requeue(id, LocalDateTime.now());
+        return ApiResponse.ok(requeue > 0);
     }
 }

@@ -51,7 +51,7 @@ public abstract class AbstractChannelWorker {
         try {
             ok = sender.apply(deliveryDO, noticeDO);
         } catch (Exception e) {
-            // 发送异常与返回 false 同语义:走 retrying+退避,不阻断 ack(失败语义在 DB,不在 Kafka)
+            // 发送异常与返回 false 同语义:走 backoff+退避,不阻断 ack(失败语义在 DB,不在 Kafka)
             log.error("渠道发送异常 deliveryId={}, channel={}", deliveryDO.getId(), deliveryDO.getChannel(), e);
         }
         if (ok) {
