@@ -1,18 +1,17 @@
 package com.mars.auris.push.service;
 
-import com.mars.auris.common.utils.JsonUtils;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mars.auris.push.cache.PreferenceCache;
 import com.mars.auris.push.common.Channel;
 import com.mars.auris.push.common.Delivery;
 import com.mars.auris.push.entity.DeliveryDO;
 import com.mars.auris.push.event.TranscribeEvent;
 import com.mars.auris.push.mapper.DeliveryMapper;
+import com.mars.auris.push.model.DeliveryTask;
+import com.mars.auris.push.producer.DeliveryProducer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
-
-import java.util.Map;
 
 /**
  * @author geyan
@@ -26,9 +25,7 @@ public class ChannelRouterService {
     @Autowired
     private DeliveryMapper deliveryMapper;
     @Autowired
-    private KafkaTemplate<String, String> kafka;
-
-
+    private DeliveryProducer deliveryProducer;
 
     /**
      * 渠道的投递
@@ -49,21 +46,33 @@ public class ChannelRouterService {
             DeliveryDO r = new DeliveryDO();
             r.setNotificationId(notificationId);
             r.setChannel(ch.getCode());
-            r.setStatus(Delivery.RUNNING.getCode());
+            r.setStatus(Delivery.PENDING.getCode());
 
             try {
                 deliveryMapper.insert(r);
             } catch (DuplicateKeyException exception) {
+                // uk命中，检查status是否为0，如果是，消息可能从未送达，此时需要补发
+                // 补发安全: worker端 markSent CAS幂等吸收，这里可以使用at-least-once
+                LambdaQueryWrapper<DeliveryDO> query = new LambdaQueryWrapper<>();
+                query.eq(DeliveryDO::getNotificationId, notificationId)
+                        .eq(DeliveryDO::getChannel, r.getChannel());
+                DeliveryDO exist = deliveryMapper.selectOne(query);
+                if (exist != null && exist.getStatus() == Delivery.PENDING.getCode()) {
+                    deliveryProducer.sendDelivery(DeliveryTask.builder()
+                            .deliveryId(String.valueOf(exist.getId()))
+                            .noticeId(String.valueOf(exist.getNotificationId()))
+                            .channel(exist.getChannel())
+                            .attempt(0).build());
+                }
                 continue;
             }
 
             // 2. kafka通知消费者
-            kafka.send("auris-notify-delivery-" + ch.getCode(), String.valueOf(notificationId),
-                    JsonUtils.toJson(Map.of(
-                            "delivery_id", r.getId(),
-                            "notice_id", notificationId,
-                            "channel", ch.getCode(),
-                            "attempt", 0)));
+            deliveryProducer.sendDelivery(DeliveryTask.builder()
+                    .deliveryId(String.valueOf(r.getId()))
+                    .noticeId(String.valueOf(r.getNotificationId()))
+                    .channel(r.getChannel())
+                    .attempt(0).build());
         }
     }
 }

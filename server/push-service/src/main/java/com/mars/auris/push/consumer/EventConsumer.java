@@ -28,24 +28,25 @@ public class EventConsumer {
 
     @KafkaListener(topics = "auris-event", groupId = "push-service", containerFactory = "manualAckFactory")
     public void onEvent(String message, Acknowledgment ack) {
-        TranscribeEvent event;
-        try {
-            event = JsonUtils.fromJson(message, TranscribeEvent.class);
-        } catch (Exception e) {
+        TranscribeEvent event = JsonUtils.fromJson(message, TranscribeEvent.class);
+        if (event == null) {
             // 解析错误，重试1万次都失败，此时应该结束
-            log.error("事件不可解析: {}", message, e);
+            log.error("事件不可解析: {}", message);
             ack.acknowledge();
             return;
         }
 
         try {
-            Long noticeId = noticeService.createIfAbsent(event);
-            if (noticeId != null) {
-                // 做了幂等，如果未投递过，才投递
-                routerService.route(noticeId, event);
+            NoticeService.CreateResult createResult = noticeService.createIfAbsent(event);
+            if (createResult == null) {
+                log.error("落池结果异常,不 ack 等待重投: eventId={}", event.getEventId());
+                return;
+            }
+            if (createResult.created()) {
                 // 新建通知才 +1;重复事件(uk_event 命中)不重复计数——计数幂等跟随落池幂等
                 unreadCounter.incr(event.getUserId());
             }
+            routerService.route(createResult.id(), event);
         } catch (Exception e) {
             log.error("事件处理失败(不 ack,等待重投): {}", message, e);
             return;

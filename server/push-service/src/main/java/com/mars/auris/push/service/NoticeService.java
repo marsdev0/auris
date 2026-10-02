@@ -1,5 +1,6 @@
 package com.mars.auris.push.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.mars.auris.push.cache.UnreadCounter;
 import com.mars.auris.push.entity.NoticeDO;
@@ -18,12 +19,15 @@ import java.util.List;
 @Service
 public class NoticeService {
 
+    // 把是否新建与通知id分开，不要用null来判断是否新建，这个与id混到一起了
+    public record CreateResult(Long id, boolean created) {}
+
     @Autowired
     private NoticeMapper noticeMapper;
     @Autowired
     private UnreadCounter unreadCounter;
 
-    public Long createIfAbsent(TranscribeEvent event) {
+    public CreateResult createIfAbsent(TranscribeEvent event) {
         if (event == null) {
             return null;
         }
@@ -36,9 +40,15 @@ public class NoticeService {
         r.setReadFlag(0);
         try {
             noticeMapper.insert(r);
-            return r.getId();
+            return new CreateResult(r.getId(), true);
         } catch (DuplicateKeyException e) {
-            return null;
+            NoticeDO exist = noticeMapper.selectOne(new LambdaQueryWrapper<NoticeDO>()
+                    .eq(NoticeDO::getEventId, event.getEventId()));
+            if (exist == null) {
+                // 理论不可达
+                return null;
+            }
+            return new CreateResult(exist.getId(), false);
         }
     }
 
