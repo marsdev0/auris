@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: push-service
+  config:
+    import: optional:nacos:auris-push.yaml?refreshEnabled=true   # 渠道配置(webhook 等)发布到 Nacos 才生效,同 gateway 路由模式
 
   cloud:
     nacos:
