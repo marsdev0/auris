@@ -1,4 +1,4 @@
-.PHONY: infra-up run-engine run-frontend stop-frontend run-ai run-user run-push run-gateway test-java build-java clean-java infra-down
+.PHONY: infra-up run-engine run-frontend stop-frontend run-ai run-user run-push run-gateway test-java build-java clean-java infra-down infra-stop
 
 # ========== 启动（按依赖顺序：基础设施 -> engine -> 业务服务 -> 网关） ==========
 
@@ -47,5 +47,10 @@ build-java:
 
 # ========== 停止 ==========
 
+# 停止基础设施(容器保留为 Exited,OrbStack 可见可点启;卷数据不动)
+infra-stop:
+	cd server && docker compose stop
+
+# 移除基础设施容器(卷保留,数据不丢;下次 infra-up 重建容器挂旧卷)
 infra-down:
 	cd server && docker compose down
