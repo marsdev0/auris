@@ -40,7 +40,7 @@ class Settings:
 
     # ------ 长音频分段 ------
     ASR_SEG_TARGET_MIN_S = int(os.getenv("ASR_SEG_TARGET_MIN_S", "10"))  # 段最短
-    ASR_SEG_TARGET_MAX_S = int(os.getenv("ASR_SEG_TARGET_MAX_S", "60"))  # 段最长
+    ASR_SEG_TARGET_MAX_S = int(os.getenv("ASR_SEG_TARGET_MAX_S", "15"))  # 段最长(实测:不可抢占单元粒度,见 P8 §8.3;60s 时 sync under load 3.6s,15s 时 1.18s)
     ASR_SEG_MIN_SILENCE_MS = int(os.getenv("ASR_SEG_MIN_SILENCE_MS", "500"))  # 批处理判静音(流式 300)
     ASR_SEG_OVERLAP_MS = int(os.getenv("ASR_SEG_OVERLAP_MS", "300"))  # 尾延,只进 pcm 不进报告边界
     ASR_SEG_SNAP_WINDOW_S = float(os.getenv("ASR_SEG_SNAP_WINDOW_S", "2.0"))  # 硬切对齐搜索窗
