@@ -21,13 +21,13 @@ import numpy as np
 from loguru import logger
 from pydantic import BaseModel
 
+from engine.asr import gate
 from engine.asr.audio import load_audio, pcm_to_wav
 from engine.asr.long_audio.assembler import Assembler, LongTaskResult
-from engine.asr.long_audio.scheduler import Scheduler, _global_sem
+from engine.asr.long_audio.scheduler import Scheduler
 from engine.asr.long_audio.segmenter import Segmenter
 from engine.asr.service import get_asr_service
 from engine.config import Settings
-from engine.sources import fetch_source
 
 _SR = Settings.ASR_SAMPLE_RATE
 
@@ -119,7 +119,7 @@ async def _run(task_id: str, audio: bytes, provider_name: str | None) -> None:
             # 拿到的恒是 16k mono wav,与长路径分段负载同构。
             _set(task_id, "transcribing", 30)
             pcm = (np.clip(y, -1.0, 1.0) * 32767).astype("<i2").tobytes()
-            async with _global_sem:
+            async with gate.batch_lease():
                 res = await provider.transcribe(pcm_to_wav(pcm))
             result = LongTaskResult(
                 text=res.text.strip(),

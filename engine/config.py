@@ -45,10 +45,7 @@ class Settings:
     ASR_SEG_OVERLAP_MS = int(os.getenv("ASR_SEG_OVERLAP_MS", "300"))  # 尾延,只进 pcm 不进报告边界
     ASR_SEG_SNAP_WINDOW_S = float(os.getenv("ASR_SEG_SNAP_WINDOW_S", "2.0"))  # 硬切对齐搜索窗
 
-    # ------ 长音频并发调度 ------
-    # 全局推理并发上限 M(整段路径与分段路径共享)。老项目实测脚本结论:待复跑
-    # phase2b_concurrency_test 定,默认 2 是保守值,不拍脑袋调大
-    ASR_LONG_CONCURRENCY = int(os.getenv("ASR_LONG_CONCURRENCY", "2"))
+    # ------ 长音频段级容错 ------
     ASR_SEG_TIMEOUT_S = float(os.getenv("ASR_SEG_TIMEOUT_S", "120"))  # 单段超时(60s段 whisper CPU RTF≈1 不误杀)
     ASR_SEG_RETRY = int(os.getenv("ASR_SEG_RETRY", "3"))  # 段级重试
 
@@ -68,3 +65,13 @@ class Settings:
     ASR_QAS_API_KEY = os.getenv("ASR_QAS_API_KEY", "")
     ASR_QAS_HEARTBEAT = os.getenv("ASR_QAS_HEARTBEAT", "true").lower() == "true"  # 60s 静音保活;心跳帧 provider 内过滤
     ASR_QAS_SILENCE_MS = int(os.getenv("ASR_QAS_SILENCE_MS", "400"))  # max_sentence_silence(交互场景;默认 1300 偏会议)
+
+    # ------ 调度闸门(原 ASR_LONG_CONCURRENCY 已废弃,M 语义归 ASR_GATE_TOTAL) ------
+    ASR_GATE_TOTAL = int(os.getenv("ASR_GATE_TOTAL", "3"))  # M：总闸门(原值 3 平移;P10 实测校准,宁欠勿超)
+    ASR_GATE_RESERVE = int(os.getenv("ASR_GATE_RESERVE", "1"))  # R：给同步请求预留的位数
+    ASR_TASK_CONCURRENCY = int(os.getenv("ASR_TASK_CONCURRENCY", "2"))  # 单任务段级
+    ASR_GATE_QUEUE_MAX = int(os.getenv("ASR_GATE_QUEUE_MAX", "512"))  # 等待着上限
+    ASR_GATE_AGE_S = int(os.getenv("ASR_GATE_AGE_S", "30"))  # aging步长
+    ASR_GATE_MODE = os.getenv("ASR_GATE_MODE", "semaphore")      # semaphore|priority
+    ASR_SYNC_MAX_WAIT_S = float(os.getenv("ASR_SYNC_MAX_WAIT_S", "10"))  # sync 等待上限
+    ASR_RETRY_BACKOFF_BASE_S = float(os.getenv("ASR_RETRY_BACKOFF_BASE_S", "1"))  # 重试退避基数

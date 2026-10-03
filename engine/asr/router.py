@@ -7,6 +7,7 @@ from typing import AsyncIterator
 from fastapi import APIRouter, UploadFile, HTTPException, WebSocket, WebSocketDisconnect, Form
 from loguru import logger
 
+from engine.asr import gate
 from engine.asr.provider import AsrCapability
 from engine.asr.service import get_asr_service
 from engine.asr.stream_handler import StreamHandler
@@ -35,7 +36,9 @@ async def transcribe(audio: UploadFile, provider: str | None = Form(None)):
     if not data:
         raise HTTPException(400, "音频内容为空")
     try:
-        res = await get_asr_service().get(provider).transcribe(data)
+        # 同步请求第一次进闸，之前是直接打到omlx
+        async with gate.sync_lease():
+            res = await get_asr_service().get(provider).transcribe(data)
     except KeyError:
         raise HTTPException(404, f"provider 不存在: {provider}")
     except Exception as e:

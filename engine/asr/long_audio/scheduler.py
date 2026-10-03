@@ -25,13 +25,11 @@ from dataclasses import dataclass
 
 from loguru import logger
 
+from engine.asr import gate
 from engine.asr.audio import pcm_to_wav
 from engine.asr.long_audio.segmenter import Seg
 from engine.asr.provider import AsrProvider
 from engine.config import Settings
-
-# 模块级单例:全进程一个信号量(跨 Scheduler 实例、跨任务共享),M 见配置注释
-_global_sem = asyncio.Semaphore(Settings.ASR_LONG_CONCURRENCY)
 
 
 @dataclass
@@ -70,7 +68,7 @@ class Scheduler:
         on_done: OnSegDone | None,
     ) -> SegmentResult:
         # 全局信号量:持有期间恰是一次推理(重试间也持有,防失败热旋打满引擎)
-        async with _global_sem:
+        async with gate.batch_lease():
             t0 = asyncio.get_running_loop().time()
             last_err: Exception | None = None
             for attempt in range(1, Settings.ASR_SEG_RETRY + 1):
