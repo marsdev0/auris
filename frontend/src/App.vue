@@ -6,13 +6,15 @@ import HistoryPage from './pages/HistoryPage.vue'
 import ProfilePage from './pages/ProfilePage.vue'
 import AsrPage from './pages/AsrPage.vue'
 import NoticePage from './pages/NoticePage.vue'
+import ModelConfigPage from './pages/ModelConfigPage.vue'
+import DubbingPage from './pages/DubbingPage.vue'
 import UserAvatar from './components/UserAvatar.vue'
 import { getToken, clearToken, getProfile, authExpired, unreadCount } from './services/api'
 
 const logged = ref(!!getToken())
-/** 视图:tab 页(转写/实时) + 菜单进入的页面(个人/历史/通知);返回时回上一个视图 */
-const view = ref<'transcribe' | 'stream' | 'profile' | 'history' | 'notice'>('transcribe')
-let prevView: 'transcribe' | 'stream' = 'transcribe'
+/** 视图:tab 页(转写/实时/配音) + 菜单进入的页面(个人/历史/通知/模型配置);返回时回上一个视图 */
+const view = ref<'transcribe' | 'stream' | 'dubbing' | 'profile' | 'history' | 'notice' | 'models'>('transcribe')
+let prevView: 'transcribe' | 'stream' | 'dubbing' = 'transcribe'
 /** 转写终态后通知历史页刷新 */
 const historyNonce = ref(0)
 /** 头像下拉菜单开合 */
@@ -83,13 +85,13 @@ function logout() {
   stopUnreadPoll()
 }
 
-function goTab(t: 'transcribe' | 'stream') {
+function goTab(t: 'transcribe' | 'stream' | 'dubbing') {
   view.value = t
   menuOpen.value = false
 }
 
-function goPage(p: 'profile' | 'history' | 'notice') {
-  if (view.value === 'transcribe' || view.value === 'stream') prevView = view.value
+function goPage(p: 'profile' | 'history' | 'notice' | 'models') {
+  if (view.value === 'transcribe' || view.value === 'stream' || view.value === 'dubbing') prevView = view.value
   view.value = p
   menuOpen.value = false
 }
@@ -101,6 +103,7 @@ function goBack() {
 const tabs = [
   { key: 'transcribe', label: '转写' },
   { key: 'stream', label: '实时' },
+  { key: 'dubbing', label: '配音' },
 ] as const
 </script>
 
@@ -148,6 +151,7 @@ const tabs = [
             <button class="w-full text-left px-4 py-2 text-sm text-gray-600 hover:bg-gray-50" @click="goPage('profile')">个人信息</button>
             <button class="w-full text-left px-4 py-2 text-sm text-gray-600 hover:bg-gray-50" @click="goPage('history')">我的转写</button>
             <button class="w-full text-left px-4 py-2 text-sm text-gray-600 hover:bg-gray-50" @click="goPage('notice')">我的通知</button>
+            <button class="w-full text-left px-4 py-2 text-sm text-gray-600 hover:bg-gray-50" @click="goPage('models')">模型配置</button>
             <div class="border-t my-1"></div>
             <button class="w-full text-left px-4 py-2 text-sm text-gray-600 hover:bg-gray-50" @click="logout">退出登录</button>
           </div>
@@ -160,7 +164,9 @@ const tabs = [
       <HistoryPage v-if="view === 'history'" :key="historyNonce" @back="goBack" />
       <ProfilePage v-if="view === 'profile'" @back="goBack" @to-history="view = 'history'" />
       <NoticePage v-if="view === 'notice'" @back="goBack" @read="onNoticeRead" />
+      <ModelConfigPage v-if="view === 'models'" @back="goBack" />
       <AsrPage v-if="view === 'stream'" />
+      <DubbingPage v-show="view === 'dubbing'" @to-models="goPage('models')" />
     </main>
   </div>
 </template>

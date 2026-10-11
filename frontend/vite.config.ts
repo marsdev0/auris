@@ -13,6 +13,10 @@ export default defineConfig({
         changeOrigin: true,
         ws: true, // /v1/asr/stream 是 WebSocket
       },
+      '/v1/byok': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
       '/v1/transcribe': {
         target: 'http://localhost:8080',
         changeOrigin: true,

@@ -126,7 +126,7 @@ export class ApiError extends Error {
 /** 401 时广播,App.vue 监听后清 token 回登录页 */
 export const authExpired = new EventTarget()
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
