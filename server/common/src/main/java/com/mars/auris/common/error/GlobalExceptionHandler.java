@@ -3,6 +3,7 @@ package com.mars.auris.common.error;
 import com.mars.auris.common.rsp.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -43,6 +44,26 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleException2(MethodArgumentNotValidException e) {
         log.error("handleException2 ", e);
+        return ResponseEntity
+                .status(CommonErrorCode.BAD_REQUEST.getHttpStatus())
+                .body(ApiResponse.error(CommonErrorCode.BAD_REQUEST));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException e) {
+        log.error("handleIllegalArgument ", e);
+        return ResponseEntity
+                .status(CommonErrorCode.BAD_REQUEST.getHttpStatus())
+                .body(ApiResponse.error(CommonErrorCode.BAD_REQUEST));
+    }
+
+    /**
+     * 请求体不可读:JSON 格式错/字段类型错/枚举脏值(@JsonCreator 工厂抛的 IAE 被 Jackson 包装)。
+     * 本质是客户端错误,归 400 而非 500
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("handleHttpMessageNotReadable: {}", e.getMessage());
         return ResponseEntity
                 .status(CommonErrorCode.BAD_REQUEST.getHttpStatus())
                 .body(ApiResponse.error(CommonErrorCode.BAD_REQUEST));
