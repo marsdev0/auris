@@ -7,6 +7,7 @@ import com.mars.auris.ai.config.EngineProperties;
 import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.ai.transcribe.common.TranscribeConst;
 import com.mars.auris.ai.transcribe.convert.TranscribeConvert;
+import com.mars.auris.ai.engine.EngineClient;
 import com.mars.auris.ai.error.AIErrorCode;
 import com.mars.auris.ai.transcribe.entity.TranscribeRecordDO;
 import com.mars.auris.ai.transcribe.model.LongTaskResp;
@@ -56,6 +57,9 @@ public class TranscribeService {
 
     @Autowired
     private TranscribeConvert convert;
+
+    @Autowired
+    private EngineClient engineClient;
 
     @Autowired
     private EngineProperties properties;
@@ -191,25 +195,16 @@ public class TranscribeService {
     // ==================== 内部逻辑 ===================================
 
     /**
-     * engine 调用统一出口:非 0 业务码 + HTTP 异常在此映射为 AurisException。
-     * 映射表(P1 方案 §3.4):
+     * engine 调用统一出口:HTTP 层委托 EngineClient 骨架,本域保留 code 检查(非 0 = 转写失败 = 请求失败)
+     * 与状态码映射表(P1 方案 §3.4):
      *   400 空内容/解码失败 → AUDIO_INVALID(msg 透传 engine 原文)
      *   404 任务不存在/过期 → TASK_NOT_FOUND;413 → FILE_TOO_LARGE
      *   5xx → ENGINE_ERROR(不透传原文,可能含内部路径,日志留 detail)
      *   连不上/超时 → ENGINE_UNAVAILABLE
      */
-    private <T> EngineResp<T> callEngine(EngineCall<T> call) {
-        EngineResp<T> result;
-        try {
-            result = call.get();
-        } catch (ResourceAccessException e) {
-            // 连不上/超时(engine 停机、网络断):快速失败,503
-            log.warn("engine 不可达: {}", e.getMessage());
-            throw new AurisException(AIErrorCode.ENGINE_UNAVAILABLE);
-        } catch (RestClientResponseException e) {
-            throw toAurisException(e);
-        }
-        if (result == null || result.getCode() == null || result.getCode() != 0) {
+    private <T> EngineResp<T> callEngine(Supplier<EngineResp<T>> call) {
+        EngineResp<T> result = engineClient.execute(call, this::toAurisException);
+        if (result == null || !result.isSuccess()) {
             throw new AurisException(AIErrorCode.ENGINE_ERROR);
         }
         return result;
@@ -219,42 +214,14 @@ public class TranscribeService {
      * engine 的 HTTP 状态码 → AurisException(engine 错误文案在 detail 里,按需透传)
      */
     private AurisException toAurisException(RestClientResponseException e) {
-        String detail = extractDetail(e);
+        String detail = engineClient.extractDetail(e);
         return switch (e.getStatusCode().value()) {
             case 400 -> new AurisException(AIErrorCode.AUDIO_INVALID, detail);
             case 404 -> new AurisException(AIErrorCode.TASK_NOT_FOUND, detail);
             case 413 -> new AurisException(CommonErrorCode.FILE_TOO_LARGE);
-            default -> {
-                // 5xx 及其他:不透传原文(可能含内部路径),日志留 detail
-                log.error("engine 返回异常状态 {}: {}", e.getStatusCode().value(), detail);
-                yield new AurisException(AIErrorCode.ENGINE_ERROR);
-            }
+            default -> new AurisException(AIErrorCode.ENGINE_ERROR);
         };
     }
-
-    /**
-     * 从 engine 的错误响应里抠 message(FastAPI HTTPException 的 body 形如 {"detail": "..."} )
-     */
-    private String extractDetail(RestClientResponseException e) {
-        try {
-            JsonNode node = new ObjectMapper().readTree(e.getResponseBodyAsString());
-            if (node.hasNonNull("detail")) {
-                return node.get("detail").asText();
-            }
-        } catch (Exception ignored) {
-            // body 不是 JSON(或读不出来):兜底用原始 body,抠不出来就 null
-        }
-        String body = e.getResponseBodyAsString();
-        return body.isEmpty() ? null : body;
-    }
-
-    /**
-     * 函数式接口,承载一次 engine 调用(lambda 里不能抛受检异常,这里限定运行时异常即可)
-     */
-    @FunctionalInterface
-    private interface EngineCall<T> extends Supplier<EngineResp<T>> {
-    }
-
 
     private MultipartBodyBuilder getMultipartBodyBuilder(byte[] audio, String provider) {
         MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
