@@ -41,6 +41,16 @@ public class RestClientConfig {
                 .build();
     }
 
+    /** BYOK 连通性实测:秒级调用,与 poll 同档超时 */
+    @Bean
+    @Qualifier("engineByok")
+    public RestClient engineByokRestClient(RestClient.Builder builder) {
+        return builder
+                .baseUrl(properties.getBaseUrl())
+                .requestFactory(httpComponents(Duration.ofSeconds(3), Duration.ofSeconds(15)))
+                .build();
+    }
+
 
     private static ClientHttpRequestFactory httpComponents(Duration connect, Duration read) {
         return ClientHttpRequestFactoryBuilder.httpComponents()
