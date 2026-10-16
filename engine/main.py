@@ -14,6 +14,8 @@ from loguru import logger
 
 from engine.config import Settings
 from engine.asr.router import router as asr_router
+from engine.sources.router import router as sources_router
+from engine.byok.router import router as byok_router
 
 
 @asynccontextmanager
@@ -48,12 +50,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(asr_router, tags=["asr"])
-
-# sources:URL 抓取调试直连口(Java 不依赖,排障用;见 P4 方案 §2.6)
-from engine.sources.router import router as sources_router
+app.include_router(asr_router)
 app.include_router(sources_router)
-
+app.include_router(byok_router)
 @app.get("/")
 async def root():
     return {"service": Settings.APP_NAME, "version": Settings.APP_VERSION, "status": "running"}
