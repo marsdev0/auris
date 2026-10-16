@@ -1,15 +1,14 @@
 """
 URL -> 抓取音频
 """
-import ipaddress
-import socket
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
 from loguru import logger
 
 import httpx
+
+from engine.net.safety import UrlSafetyError, assert_public_url
 
 _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 _MAX_BYTES = 500 * 1024 * 1024      # 与 task/start 的 body 护栏同口径
@@ -32,28 +31,13 @@ class SourceResult:
     title: str
     site: str  # "xiaoyuzhou" / "bilibili" / "direct"
 
-# --- Server-Site Request Forgery(SSRF) 闸门 ---
-def assert_public_url(url: str) -> None:
-    """
-    URL 安全校验：仅 http(s) + 解析后所有 IP 必须是公网
-    必须在 DNS 解析后逐 IP 校验，而不是字符串匹配
-    防 dns rebinding(域名第一次解析过闸、下载时重绑到 127.0.0.1)
-    ip.is_global 恰好覆盖:环回/私网/链路本地(169.254)/保留段/0.0.0.0
-    """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise SourceError(f"仅支持 http/https 链接: {parsed.scheme}")
-    host = parsed.hostname
-    if not host:
-        raise SourceError("链接缺失主机名")
+# --- Server-Site Request Forgery(SSRF) 闸门:实现在 engine/net/safety.py(横切模块) ---
+def _gate(url: str) -> None:
+    """闸门转发:对外维持 SourceError 契约(历史捕获方零改动)"""
     try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror:
-        raise SourceError(f"域名无法解析: {host}")
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global:
-            raise SourceError(f"不允许访问内网地址: {host}")
+        assert_public_url(url)
+    except UrlSafetyError as e:
+        raise SourceError(str(e)) from e
 
 # ---------- 下载器(手动逐跳重定向,每跳过闸) ----------
 def download_to_temp(url: str, *, referer: str | None = None) -> Path:
@@ -62,7 +46,7 @@ def download_to_temp(url: str, *, referer: str | None = None) -> Path:
     follow_redirects=False + 手动循环:每一跳都重新过 SSRF 闸门,
     不给"自动重定向落到内网"留口子
     """
-    assert_public_url(url)
+    _gate(url)
     headers = {"User-Agent": _UA}
     if referer:
         headers["Referer"] = referer
@@ -75,7 +59,7 @@ def download_to_temp(url: str, *, referer: str | None = None) -> Path:
                 resp = client.get(url, headers=headers)
                 if resp.status_code in (301, 302, 303, 307, 308):
                     url = str(resp.next_request.url) if resp.next_request else resp.headers["Location"]
-                    assert_public_url(url)  # 重定向后，也必须过闸门
+                    _gate(url)  # 重定向后，也必须过闸门
                     continue
                 resp.raise_for_status()
                 if (cl := resp.headers.get("Content-Length")) and int(cl) > _MAX_BYTES:

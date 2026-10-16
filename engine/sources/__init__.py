@@ -6,7 +6,8 @@ sources 统一入口:SSRF 预检 → 站点分发 → 抓取。
 import asyncio
 
 from . import direct, xiaoyuzhou, bilibili
-from .base import SourceResult, assert_public_url, SourceError
+from .base import SourceResult, SourceError
+from engine.net.safety import assert_public_url
 
 # 站点解析器; direct 是兜底，最后判定
 _PARSERS = (xiaoyuzhou, bilibili)

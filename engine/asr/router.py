@@ -193,7 +193,7 @@ async def start_task_url(req: UrlTaskReq):
     if len(req.url) > 2048:
         raise HTTPException(400, "URL 过长")
     try:
-        from engine.sources.base import assert_public_url
+        from engine.net.safety import assert_public_url
         # getaddrinfo 是阻塞 DNS 调用,丢线程执行,不冻事件循环
         await asyncio.to_thread(assert_public_url, req.url)
     except Exception as e:
