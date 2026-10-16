@@ -11,6 +11,7 @@
 规避旧项目"流式一套 VAD、长音频另一套"的坑。
 """
 import numpy as np
+import threading
 from silero_vad import load_silero_vad, VADIterator, get_speech_timestamps
 
 from engine.config import Settings
@@ -19,9 +20,14 @@ from engine.config import Settings
 class VadEngine:
     """进程单例。持有 silero VAD 模型(几 MB,加载一次,所有连接共享)。
 
-    模型本身无状态,可安全多连接并发;**有状态的是每连接的 VADIterator**
-    (内部维护"当前是否在说话/静音计时/已输出的语音段"等),所以每个
-    WS 连接调 new_iterator() 各拿一份,互不污染。
+    注意:silero 的 TorchScript 模型**并发推理不安全**(实测 2026-10-03:双长任务
+    并发分段 → RuntimeError: select(): index out of range)——批处理入口
+    detect_regions 经 _batch_lock 串行化。流式路径 VADIterator 引用同一模型,
+    "批处理 + 流式同时跑"理论上同样有险,未加锁,记为已知风险(伪流式逐窗调用
+    与批式长时间推理重叠的概率低,且当前无并发场景验证)。
+
+    "有状态的是每连接的 VADIterator"(内部维护"当前是否在说话/静音计时/
+    已输出的语音段"等),所以每个 WS 连接调 new_iterator() 各拿一份,互不污染。
 
     silero 模型的 chunk 固定为 512 样本(16kHz 下 32ms),VADIterator
     会按该步长消费音频;喂入的每个 chunk 会得到一个事件:
@@ -33,6 +39,8 @@ class VadEngine:
     def __init__(self):
         # silero-vad 官方权重(包内自带,首次用会从 torch hub 缓存读取)
         self._model = load_silero_vad()
+        # TorchScript 并发推理不安全(见类 docstring),批处理入口串行化
+        self._batch_lock = threading.Lock()
 
     def new_iterator(self) -> VADIterator:
         """新建一个有状态迭代器(每个 WS 连接一份)。"""
@@ -61,17 +69,20 @@ class VadEngine:
         与流式路径 new_iterator() 共享同一个 silero 模型单例
         流式：VADIterator 逐窗推进、吐 start/end 事件，禁音判定参数为300ms
         批式：整段一次检测，直接拿全部语音区，静音判定参数为500ms
+        经 _batch_lock 串行化——多任务并发分段时排队检测(2h 音频 ~30-50s,
+        换 TorchScript 并发崩溃的正确性)
         """
-        ts = get_speech_timestamps(
-            audio=audio,
-            model=self._model,
-            threshold=Settings.ASR_VAD_THRESHOLD,
-            min_speech_duration_ms=250,
-            min_silence_duration_ms=Settings.ASR_SEG_MIN_SILENCE_MS,
-            speech_pad_ms=Settings.ASR_VAD_SPEECH_PAD_MS,
-            sampling_rate=Settings.ASR_SAMPLE_RATE,
-        )
-        return [(t["start"], t["end"]) for t in ts]
+        with self._batch_lock:
+            ts = get_speech_timestamps(
+                audio=audio,
+                model=self._model,
+                threshold=Settings.ASR_VAD_THRESHOLD,
+                min_speech_duration_ms=250,
+                min_silence_duration_ms=Settings.ASR_SEG_MIN_SILENCE_MS,
+                speech_pad_ms=Settings.ASR_VAD_SPEECH_PAD_MS,
+                sampling_rate=Settings.ASR_SAMPLE_RATE,
+            )
+            return [(t["start"], t["end"]) for t in ts]
 
 _engine: VadEngine | None = None
 
