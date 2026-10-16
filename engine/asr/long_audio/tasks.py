@@ -119,7 +119,7 @@ async def _run(task_id: str, audio: bytes, provider_name: str | None) -> None:
             # 拿到的恒是 16k mono wav,与长路径分段负载同构。
             _set(task_id, "transcribing", 30)
             pcm = (np.clip(y, -1.0, 1.0) * 32767).astype("<i2").tobytes()
-            async with gate.batch_lease():
+            async with gate.short_lease(task_id):
                 res = await provider.transcribe(pcm_to_wav(pcm))
             result = LongTaskResult(
                 text=res.text.strip(),
@@ -143,7 +143,8 @@ async def _run(task_id: str, audio: bytes, provider_name: str | None) -> None:
                 # 段进度映射到 15~99,给 completed 留 100
                 t.progress = 15 + (t.done_segments / t.total_segments) * 84
 
-            results = await Scheduler().transcribe_all(segs, provider, on_done)
+            results = await Scheduler().transcribe_all(
+                segs, provider, on_done, task_id=task_id)
             result = Assembler.assemble(results)
             _set(task_id, failed_segments=result.failed)
 

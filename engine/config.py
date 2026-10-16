@@ -70,7 +70,7 @@ class Settings:
     ASR_GATE_TOTAL = int(os.getenv("ASR_GATE_TOTAL", "3"))  # M：总闸门(原值 3 平移;P10 实测校准,宁欠勿超)
     ASR_GATE_RESERVE = int(os.getenv("ASR_GATE_RESERVE", "1"))  # R：给同步请求预留的位数
     ASR_TASK_CONCURRENCY = int(os.getenv("ASR_TASK_CONCURRENCY", "2"))  # 单任务段级
-    ASR_GATE_QUEUE_MAX = int(os.getenv("ASR_GATE_QUEUE_MAX", "512"))  # 等待着上限
+    ASR_GATE_QUEUE_MAX = int(os.getenv("ASR_GATE_QUEUE_MAX", "4096"))  # 等待者上限(15s 段粒度下单任务 ~470 waiter,512 会误拒;多任务叠加才该拒)
     ASR_GATE_AGE_S = int(os.getenv("ASR_GATE_AGE_S", "30"))  # aging步长
     ASR_GATE_MODE = os.getenv("ASR_GATE_MODE", "semaphore")      # semaphore|priority
     ASR_SYNC_MAX_WAIT_S = float(os.getenv("ASR_SYNC_MAX_WAIT_S", "10"))  # sync 等待上限

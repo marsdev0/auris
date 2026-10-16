@@ -36,11 +36,13 @@ async def transcribe(audio: UploadFile, provider: str | None = Form(None)):
     if not data:
         raise HTTPException(400, "音频内容为空")
     try:
-        # 同步请求第一次进闸，之前是直接打到omlx
+        # 同步请求进闸(收编点①);有界等待,超时/队列满 → 429
         async with gate.sync_lease():
             res = await get_asr_service().get(provider).transcribe(data)
     except KeyError:
         raise HTTPException(404, f"provider 不存在: {provider}")
+    except (gate.QueueFullError, asyncio.TimeoutError):
+        raise HTTPException(429, "engine 过载,请稍后重试")
     except Exception as e:
         raise HTTPException(400, f"音频解码或转写失败: {e}")
     return {
@@ -48,6 +50,13 @@ async def transcribe(audio: UploadFile, provider: str | None = Form(None)):
         "message": "success",
         "data": res.model_dump()
     }
+
+
+@router.get("/gate/stats")
+async def gate_stats():
+    """调度闸门观测(P8 §5.6):模式/队列深度/在途/按 kind 的 wait、hold 分位数。
+    hold_ms 是下游单容量的侧写,直接反哺 P10 定 M。"""
+    return {"code": 0, "message": "success", "data": gate.stats()}
 
 
 @router.websocket("/stream")

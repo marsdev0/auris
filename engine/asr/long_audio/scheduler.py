@@ -20,6 +20,7 @@ on_done 回调:每段终态(无论成败)触发一次,供任务表推进度—�
 回调在信号量外调,慢回调不占推理槽位。
 """
 import asyncio
+import random
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -48,17 +49,19 @@ OnSegDone = Callable[[int, bool], Awaitable[None]]
 
 
 class Scheduler:
-    """无状态(信号量在模块级),可随意复用/并发调用。"""
+    """无状态(闸门在模块级),可随意复用/并发调用。"""
 
     async def transcribe_all(
         self,
         segs: list[Seg],
         provider: AsrProvider,
         on_done: OnSegDone | None = None,
+        task_id: str | None = None,
     ) -> list[SegmentResult]:
-        """并发转写所有分段。返回顺序与 segs 一致(gather 保序)。"""
+        """并发转写所有分段。返回顺序与 segs 一致(gather 保序)。
+        task_id 透传给闸门做 per-task cap 记账(priority 模式)。"""
         return await asyncio.gather(
-            *(self._transcribe_one(seg, provider, on_done) for seg in segs)
+            *(self._transcribe_one(seg, provider, on_done, task_id) for seg in segs)
         )
 
     async def _transcribe_one(
@@ -66,36 +69,53 @@ class Scheduler:
         seg: Seg,
         provider: AsrProvider,
         on_done: OnSegDone | None,
+        task_id: str | None,
     ) -> SegmentResult:
-        # 全局信号量:持有期间恰是一次推理(重试间也持有,防失败热旋打满引擎)
-        async with gate.batch_lease():
-            t0 = asyncio.get_running_loop().time()
-            last_err: Exception | None = None
-            for attempt in range(1, Settings.ASR_SEG_RETRY + 1):
-                try:
-                    # 裸 PCM 包 WAV 头(provider.transcribe 契约是"任意格式字节",
-                    # 与流式路径 stream_handler._transcribe 同一条路)
-                    res = await asyncio.wait_for(
-                        provider.transcribe(pcm_to_wav(seg.pcm)),
-                        timeout=Settings.ASR_SEG_TIMEOUT_S,
-                    )
-                    latency = (asyncio.get_running_loop().time() - t0) * 1000
-                    await self._notify(on_done, seg.index, True)
-                    return SegmentResult(
-                        index=seg.index, start=seg.start, end=seg.end,
-                        text=res.text.strip(), ok=True, latency_ms=latency,
-                    )
-                except Exception as e:  # 含 TimeoutError;段级隔离,不冒泡
-                    last_err = e
-                    logger.warning(
-                        f"seg#{seg.index} 第{attempt}/{Settings.ASR_SEG_RETRY}次失败: {e}")
+        # 闸门持有期间恰是一次推理(重试间也持有,防失败热旋打满引擎)
+        try:
+            async with gate.segment_lease(task_id):
+                t0 = asyncio.get_running_loop().time()
+                last_err: Exception | None = None
+                for attempt in range(1, Settings.ASR_SEG_RETRY + 1):
+                    try:
+                        # 裸 PCM 包 WAV 头(provider.transcribe 契约是"任意格式字节",
+                        # 与流式路径 stream_handler._transcribe 同一条路)
+                        res = await asyncio.wait_for(
+                            provider.transcribe(pcm_to_wav(seg.pcm)),
+                            timeout=Settings.ASR_SEG_TIMEOUT_S,
+                        )
+                        latency = (asyncio.get_running_loop().time() - t0) * 1000
+                        await self._notify(on_done, seg.index, True)
+                        return SegmentResult(
+                            index=seg.index, start=seg.start, end=seg.end,
+                            text=res.text.strip(), ok=True, latency_ms=latency,
+                        )
+                    except Exception as e:  # 含 TimeoutError;段级隔离,不冒泡
+                        last_err = e
+                        logger.warning(
+                            f"seg#{seg.index} 第{attempt}/{Settings.ASR_SEG_RETRY}次失败: {e}")
+                        if attempt < Settings.ASR_SEG_RETRY:
+                            # 重试退避:base×2^(n-1)+jitter(重试间仍持闸门,
+                            # 防断连重试瞬间新旧请求并行占用下游容量)
+                            await asyncio.sleep(
+                                Settings.ASR_RETRY_BACKOFF_BASE_S * 2 ** (attempt - 1)
+                                + random.uniform(0, 0.5))
 
-            latency = (asyncio.get_running_loop().time() - t0) * 1000
-            logger.error(f"seg#{seg.index} 重试耗尽,标记失败: {last_err}")
+                latency = (asyncio.get_running_loop().time() - t0) * 1000
+                logger.error(f"seg#{seg.index} 重试耗尽,标记失败: {last_err}")
+                await self._notify(on_done, seg.index, False)
+                return SegmentResult(
+                    index=seg.index, start=seg.start, end=seg.end,
+                    text="", ok=False, latency_ms=latency,
+                )
+        except gate.QueueFullError:
+            # 闸门获取处单独接:段级隔离兑底,任务不失败;不进重试
+            # (队列满是过载信号,重试只会加剧,且此时未持闸门)
+            logger.error(f"seg#{seg.index} 被闸门拒绝(队列满): 过载信号")
             await self._notify(on_done, seg.index, False)
             return SegmentResult(
                 index=seg.index, start=seg.start, end=seg.end,
-                text="", ok=False, latency_ms=latency,
+                text="", ok=False, latency_ms=0.0,
             )
 
     @staticmethod
