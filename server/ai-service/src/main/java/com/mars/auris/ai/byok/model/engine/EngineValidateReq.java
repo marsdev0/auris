@@ -1,16 +1,22 @@
 package com.mars.auris.ai.byok.model.engine;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Data;
 
 /**
  * 转发 engine /byok/validate 的请求体。
  * api_key 为解密后明文,仅内网一程,engine 侧零日志
  *
+ * <p>engine 通道一律 snake_case(与 EngineValidateResp.latency_ms 同纪律):
+ * 类级 @JsonNaming 统一翻译,baseUrl -> base_url / apiKey -> api_key,
+ * 新增字段自动适配,无需逐字段 @JsonProperty。
+ *
  * @author geyan
  * @date 2026/10/11
  */
 @Data
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class EngineValidateReq {
 
     /** 模型域:llm / tts / asr */
@@ -20,11 +26,9 @@ public class EngineValidateReq {
     private String provider;
 
     /** 接入地址,null = 用 provider 官方默认端点 */
-    @JsonProperty("base_url")
     private String baseUrl;
 
     /** 明文 key,免 key 配置(如 edge_tts)为 null */
-    @JsonProperty("api_key")
     private String apiKey;
 
     /** 模型名,无模型概念的配置为 null */

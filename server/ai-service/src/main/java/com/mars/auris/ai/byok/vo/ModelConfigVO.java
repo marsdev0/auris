@@ -58,5 +58,5 @@ public class ModelConfigVO {
     /**
      * 最近一次校验结果:成功为"连通正常 · xxxms",失败为原因(超长截断)
      */
-    private String lastCheckDetail;
+    private String validateDetail;
 }

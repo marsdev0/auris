@@ -25,6 +25,7 @@ public interface ByokConvert {
         vo.setVoice(config.getVoice());
         vo.setStatus(ConfigStatus.fromCode(config.getStatus()));
         vo.setLastCheckedAt(config.getLastCheckedAt());
+        vo.setValidateDetail(config.getValidateDetail());
         return vo;
     }
 }

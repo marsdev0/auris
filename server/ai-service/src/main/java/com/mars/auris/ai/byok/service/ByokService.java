@@ -24,9 +24,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -186,7 +184,20 @@ public class ByokService {
                 // byok 域映射:engine 侧异常统一 502。校验成败由 code 表达,是预期业务分支不在这层拦截
                 e -> new AurisException(AIErrorCode.ENGINE_ERROR));
 
-        // TODO D2-3: 回写 status/last_checked_at/失败原因(code=0 → verified;非 0 → failed + message)
+        // 3. 回写校验结果:status/last_checked_at/detail(成功拼延迟,失败给 engine 的 message)
+        LambdaUpdateWrapper<UserModelConfigDO> uw = new LambdaUpdateWrapper<UserModelConfigDO>()
+                .eq(UserModelConfigDO::getId, config.getId())
+                .set(UserModelConfigDO::getStatus, engineResp.isSuccess()
+                        ? ConfigStatus.VERIFIED.getCode() : ConfigStatus.FAILED.getCode())
+                .set(UserModelConfigDO::getLastCheckedAt, LocalDateTime.now());
+        if (engineResp.isSuccess() && engineResp.getData() != null) {
+            // latency 不单独建列,拼进 detail("models listed, 87 available · 812ms")
+            uw.set(UserModelConfigDO::getValidateDetail,
+                    engineResp.getData().getDetail() + " · " + engineResp.getData().getLatencyMs() + "ms");
+        } else {
+            uw.set(UserModelConfigDO::getValidateDetail, engineResp.getMessage());
+        }
+        modelConfigMapper.update(null, uw);
         return engineResp.isSuccess();
     }
 }

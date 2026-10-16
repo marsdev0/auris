@@ -87,6 +87,11 @@ public class UserModelConfigDO {
     private LocalDateTime lastCheckedAt;
 
     /**
+     * 最近一次校验结果(失败原因/成功摘要+延迟)
+     */
+    private String validateDetail;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createdAt;
