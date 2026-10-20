@@ -16,6 +16,7 @@ from engine.config import Settings
 from engine.asr.router import router as asr_router
 from engine.sources.router import router as sources_router
 from engine.byok.router import router as byok_router
+from engine.tts.router import router as tts_router
 
 
 @asynccontextmanager
@@ -53,6 +54,7 @@ app.add_middleware(
 app.include_router(asr_router)
 app.include_router(sources_router)
 app.include_router(byok_router)
+app.include_router(tts_router)
 @app.get("/")
 async def root():
     return {"service": Settings.APP_NAME, "version": Settings.APP_VERSION, "status": "running"}

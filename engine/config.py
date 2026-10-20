@@ -75,3 +75,6 @@ class Settings:
     ASR_GATE_MODE = os.getenv("ASR_GATE_MODE", "semaphore")      # semaphore|priority
     ASR_SYNC_MAX_WAIT_S = float(os.getenv("ASR_SYNC_MAX_WAIT_S", "10"))  # sync 等待上限
     ASR_RETRY_BACKOFF_BASE_S = float(os.getenv("ASR_RETRY_BACKOFF_BASE_S", "1"))  # 重试退避基数
+
+    TTS_DEFAULT_PROVIDER = os.getenv("TTS_PROVIDER", "edge_tts")
+    TTS_DEFAULT_VOICE = os.getenv("TTS_VOICE", "zh-CN-XiaoxiaoNeural")  # 与前端 edgeVoices 默认对齐
