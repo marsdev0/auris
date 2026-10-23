@@ -84,3 +84,8 @@ class Settings:
     DUB_TASK_TTL_H = int(os.getenv("DUB_TASK_TTL_H", "24"))
     DUB_CHUNK_MAX = int(os.getenv("DUB_CHUNK_MAX", "500"))  # 与 tts router 护栏同口径
     DUB_DIR = _Path(__file__).resolve().parent.parent / "data" / "dubbing"  # 产物根:repo/data/dubbing/{task_id}/
+
+    # ------ LLM------
+    LLM_BASE_URL = os.getenv("LLM_BASE_URL", "")   # OpenAI 兼容端点(dashscope compatible-mode 等)
+    LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+    LLM_MODEL = os.getenv("LLM_MODEL", "")         # 如 qwen-plus / gpt-4o-mini
