@@ -17,6 +17,7 @@ from engine.asr.router import router as asr_router
 from engine.sources.router import router as sources_router
 from engine.byok.router import router as byok_router
 from engine.tts.router import router as tts_router
+from engine.dubbing.router import router as dub_router
 
 
 @asynccontextmanager
@@ -27,11 +28,16 @@ async def lifespan(app: FastAPI):
     svc = get_asr_service()
     logger.info(f"已注册 ASR provider: {svc.registry.names()}")
     from engine.asr.vad import get_vad_engine
-    get_vad_engine()                      # 预热 VAD(分段与流式共用单例)
-    from engine.asr.long_audio.tasks import  cleanup_expired
+    get_vad_engine()  # 预热 VAD(分段与流式共用单例)
+    from engine.asr.long_audio.tasks import cleanup_expired
     cleanup_task = asyncio.create_task(cleanup_expired())  # TTL 清理(启动一轮+每小时)
+    from engine.dubbing.concat import ensure_ffmpeg
+    ensure_ffmpeg()
+    from engine.dubbing import tasks as dub_tasks
+    dub_cleanup = asyncio.create_task(dub_tasks.cleanup_expired())
     yield
     cleanup_task.cancel()
+    dub_cleanup.cancel()
     logger.info("服务正在关闭...")
 
 
@@ -55,6 +61,8 @@ app.include_router(asr_router)
 app.include_router(sources_router)
 app.include_router(byok_router)
 app.include_router(tts_router)
+app.include_router(dub_router)
+
 @app.get("/")
 async def root():
     return {"service": Settings.APP_NAME, "version": Settings.APP_VERSION, "status": "running"}

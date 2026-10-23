@@ -7,6 +7,7 @@
 import os
 
 from dotenv import load_dotenv
+from pathlib import Path as _Path
 
 load_dotenv(override=True)
 
@@ -78,3 +79,8 @@ class Settings:
 
     TTS_DEFAULT_PROVIDER = os.getenv("TTS_PROVIDER", "edge_tts")
     TTS_DEFAULT_VOICE = os.getenv("TTS_VOICE", "zh-CN-XiaoxiaoNeural")  # 与前端 edgeVoices 默认对齐
+
+    # ------ Dubbing(语音播报)------
+    DUB_TASK_TTL_H = int(os.getenv("DUB_TASK_TTL_H", "24"))
+    DUB_CHUNK_MAX = int(os.getenv("DUB_CHUNK_MAX", "500"))  # 与 tts router 护栏同口径
+    DUB_DIR = _Path(__file__).resolve().parent.parent / "data" / "dubbing"  # 产物根:repo/data/dubbing/{task_id}/
