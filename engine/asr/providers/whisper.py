@@ -30,7 +30,7 @@ class FasterWhisperProvider:
         y = load_audio(audio)
         segments, info = self._model.transcribe(
             y,
-            language=lang or Settings.ASR_LANG,
+            language=lang or Settings.ASR_LANG or None,   # 空=auto 检测(D4:ASR 出源语,翻译归 LLM)
             vad_filter=True,
             beam_size=5,
             word_timestamps=False,

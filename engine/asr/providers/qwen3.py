@@ -33,7 +33,7 @@ class Qwen3AsrProvider:
         resp = await self._client.audio.transcriptions.create(
             file=buf,
             model=Settings.ASR_QWEN3_MODEL,
-            language=lang or Settings.ASR_LANG,
+            language=lang or Settings.ASR_LANG or None,   # 空=auto 检测(D4:ASR 出源语,翻译归 LLM)
             response_format="verbose_json"
         )
         self._dump_resp(resp)  # 调试用:不想打印时注释掉这一行

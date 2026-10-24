@@ -27,7 +27,7 @@ class Settings:
     ASR_MODEL = os.getenv("ASR_MODEL", "medium")  # MVP 先 medium;验收按 RTF 调 large-v3/small
     ASR_DEVICE = os.getenv("ASR_DEVICE", "auto")  # Mac 实际 cpu
     ASR_COMPUTE = os.getenv("ASR_COMPUTE", "int8")
-    ASR_LANG = os.getenv("ASR_LANG", "zh")
+    ASR_LANG = os.getenv("ASR_LANG", "")   # 空=自动检测源语言;翻译归 LLM(D4 分工),勿改回 zh
     ASR_SAMPLE_RATE = 16000
     ASR_VAD_THRESHOLD = float(os.getenv("ASR_VAD_THRESHOLD", "0.5"))
     ASR_VAD_MIN_SILENCE_MS = int(os.getenv("ASR_VAD_MIN_SILENCE_MS", "300"))
