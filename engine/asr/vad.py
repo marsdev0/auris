@@ -14,7 +14,7 @@ import numpy as np
 import threading
 from silero_vad import load_silero_vad, VADIterator, get_speech_timestamps
 
-from engine.config import Settings
+from engine.config import ASR
 
 
 class VadEngine:
@@ -49,19 +49,19 @@ class VadEngine:
             # 语音概率阈值:模型对每个 512 样本 chunk 输出"是语音的概率",
             # ≥ threshold 判为语音。调高→切得更保守(漏字少、出字慢);
             # 调低→切得更灵敏(出字快、易把噪声当语音)。
-            threshold=Settings.ASR_VAD_THRESHOLD,
+            threshold=ASR.VAD_THRESHOLD,
             # 采样率。silero 支持 8000/16000,必须与喂入的 PCM 一致,
             # 且等于 ASR_SAMPLE_RATE(16000,单一来源)。
-            sampling_rate=Settings.ASR_SAMPLE_RATE,
+            sampling_rate=ASR.SAMPLE_RATE,
             # 判定"说完了"所需的最短静音时长(ms)。语音段内出现 ≥ 该值
             # 的连续静音才触发 {"end"} 事件闭合语段。这是伪流式尾部延迟
             # 的主要来源之一:用户停顿这么久,切段才会发生。
             # 调大→段更长更完整(语义边界好),但出字更慢。
-            min_silence_duration_ms=Settings.ASR_VAD_MIN_SILENCE_MS,
+            min_silence_duration_ms=ASR.VAD_MIN_SILENCE_MS,
             # 语音段前后各扩展的静音边距(ms)。silero 触发 start/end 的
             # 时刻比真实语音边界略靠内,前后各补一段静音,避免切掉
             # 词头/词尾的弱音(气音、轻声)。切出的段转写前不用再 pad。
-            speech_pad_ms=Settings.ASR_VAD_SPEECH_PAD_MS,
+            speech_pad_ms=ASR.VAD_SPEECH_PAD_MS,
         )
 
     def detect_regions(self, audio: np.ndarray) -> list[tuple[int, int]]:
@@ -76,11 +76,11 @@ class VadEngine:
             ts = get_speech_timestamps(
                 audio=audio,
                 model=self._model,
-                threshold=Settings.ASR_VAD_THRESHOLD,
+                threshold=ASR.VAD_THRESHOLD,
                 min_speech_duration_ms=250,
-                min_silence_duration_ms=Settings.ASR_SEG_MIN_SILENCE_MS,
-                speech_pad_ms=Settings.ASR_VAD_SPEECH_PAD_MS,
-                sampling_rate=Settings.ASR_SAMPLE_RATE,
+                min_silence_duration_ms=ASR.SEG_MIN_SILENCE_MS,
+                speech_pad_ms=ASR.VAD_SPEECH_PAD_MS,
+                sampling_rate=ASR.SAMPLE_RATE,
             )
             return [(t["start"], t["end"]) for t in ts]
 

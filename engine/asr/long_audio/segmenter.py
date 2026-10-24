@@ -22,7 +22,7 @@ import numpy as np
 
 from engine.asr.audio import load_audio
 from engine.asr.vad import get_vad_engine
-from engine.config import Settings
+from engine.config import ASR
 
 
 @dataclass
@@ -33,7 +33,7 @@ class Seg:
     pcm: bytes
 
 
-_SR = Settings.ASR_SAMPLE_RATE  # 16000,单一来源(1ms = 16 样本)
+_SR = ASR.SAMPLE_RATE  # 16000,单一来源(1ms = 16 样本)
 _FRAME_MS = 100  # _snap 能量帧宽:找"最静的 100ms 窗"
 _GUARD_S = 1.0  # _snap 每侧至少保留时长:防切点挪出段外把段切碎
 
@@ -68,8 +68,8 @@ class Segmenter:
         拆分:单区 > target_max(说话人不喘气)→ 按 target_max 硬切。
             硬切切在语音中间,是腰斩词的唯一来源——切点交给 _snap 对齐。
         """
-        tmin = int(Settings.ASR_SEG_TARGET_MIN_S * _SR)
-        tmax = int(Settings.ASR_SEG_TARGET_MAX_S * _SR)
+        tmin = int(ASR.SEG_TARGET_MIN_S * _SR)
+        tmax = int(ASR.SEG_TARGET_MAX_S * _SR)
 
         # 1. 合并 - 当前段太短时合并到上一段
         merged: list[tuple[int, int]] = []
@@ -111,11 +111,11 @@ class Segmenter:
         起点/终点要一起挪;原地顺序更新,后一个边界的搜索范围自然基于
         已挪好的前段。
         """
-        snap = int(Settings.ASR_SEG_SNAP_WINDOW_S * _SR)
+        snap = int(ASR.SEG_SNAP_WINDOW_S * _SR)
         frame = _FRAME_MS * _SR // 1000  # 100ms = 1600 样本
         guard = int(_GUARD_S * _SR)  # 每侧至少留 1s,防把段切没
         # 间隙小于"VAD 判静音的最短时长"即视为硬切边界(正常 VAD 边界 ≥ 500ms)
-        min_gap = Settings.ASR_SEG_MIN_SILENCE_MS * _SR // 1000
+        min_gap = ASR.SEG_MIN_SILENCE_MS * _SR // 1000
 
         out = list(segs)
         for i in range(len(out) - 1):
@@ -160,7 +160,7 @@ class Segmenter:
             不来自尾延(这正是 snap 必须存在的原因,别删);
           最后一段:next_start 取音频末尾,尾延可吃结尾静音。
         """
-        overlap = Settings.ASR_SEG_OVERLAP_MS * _SR // 1000
+        overlap = ASR.SEG_OVERLAP_MS * _SR // 1000
         total = len(y)
 
         out: list[Seg] = []

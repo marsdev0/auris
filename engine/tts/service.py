@@ -1,4 +1,4 @@
-from engine.config import Settings
+from engine.config import TTS
 from engine.tts.provider import ProviderRegistry, TtsProvider
 
 
@@ -16,7 +16,7 @@ class TtsService:
                 self.registry.register(mod.PROVIDER())
 
     def get(self, provider: str | None = None) -> TtsProvider:
-        return self.registry.get(provider, Settings.TTS_DEFAULT_PROVIDER)
+        return self.registry.get(provider, TTS.DEFAULT_PROVIDER)
 
 _service: TtsService | None = None
 

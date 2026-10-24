@@ -19,7 +19,7 @@ import httpx
 from loguru import logger
 from openai import AsyncOpenAI, APIStatusError
 
-from engine.config import Settings
+from engine.config import LLM
 
 _TIMEOUT = httpx.Timeout(60.0, connect=5.0)  # 生产档 read 60s(批量翻译响应慢;byok probe 是 30s 档)
 _RETRY = 3
@@ -38,10 +38,10 @@ class LlmClient:
 
     def _ensure(self) -> AsyncOpenAI:
         if self._client is None:
-            if not (Settings.LLM_BASE_URL and Settings.LLM_API_KEY):
+            if not (LLM.BASE_URL and LLM.API_KEY):
                 raise LlmError("未配置 LLM 端点:请设置 LLM_BASE_URL / LLM_API_KEY")
-            self._client = AsyncOpenAI(base_url=Settings.LLM_BASE_URL,
-                                       api_key=Settings.LLM_API_KEY,
+            self._client = AsyncOpenAI(base_url=LLM.BASE_URL,
+                                       api_key=LLM.API_KEY,
                                        timeout=_TIMEOUT)
         return self._client
 
@@ -49,12 +49,12 @@ class LlmClient:
                        temperature: float = 0.1, json_mode: bool = False) -> str:
         """一次对话调用,返回首选项文本。
 
-        model 不传时用 Settings.LLM_MODEL(平台默认);外部传入(如 BYOK 用户模型)
+        model 不传时用 LLM.MODEL(平台默认);外部传入(如 BYOK 用户模型)
         时以传入为准。temperature 默认 0.1(批量编号翻译对温度敏感);json_mode 请求
         JSON 输出,端点不支持 response_format 时自动去掉参数重试(兼容面优先)。
         """
         client = self._ensure()
-        use_model = model or Settings.LLM_MODEL
+        use_model = model or LLM.MODEL
         if not use_model:
             raise LlmError("未指定 model 且未配置 LLM_MODEL(默认模型)")
         use_json = json_mode
@@ -103,7 +103,7 @@ def get_llm_client() -> LlmClient:
 
 def warn_if_unconfigured() -> None:
     """启动提醒(main.py lifespan 调):空配置只告警,不拦启动。"""
-    if not (Settings.LLM_BASE_URL and Settings.LLM_API_KEY):
+    if not (LLM.BASE_URL and LLM.API_KEY):
         logger.warning("LLM 端点未配置(LLM_BASE_URL/LLM_API_KEY):涉及 LLM 的功能(如翻译)不可用")
-    elif not Settings.LLM_MODEL:
+    elif not LLM.MODEL:
         logger.warning("LLM_MODEL 未配置:未显式传 model 的调用(如翻译)会失败,显式传入可用")

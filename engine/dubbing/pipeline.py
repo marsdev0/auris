@@ -13,7 +13,7 @@ from engine.asr.long_audio.assembler import Assembler
 from engine.asr.long_audio.scheduler import Scheduler
 from engine.asr.long_audio.segmenter import Segmenter
 from engine.asr.service import get_asr_service
-from engine.config import Settings
+from engine.config import ASR, DUB
 from engine.dubbing import tasks
 from engine.dubbing import checkpoint as ckp
 from engine.dubbing.chunker import chunk
@@ -24,7 +24,7 @@ from engine.dubbing.types import Stage
 
 from engine.tts.service import get_tts_service
 
-_SR = Settings.ASR_SAMPLE_RATE
+_SR = ASR.SAMPLE_RATE
 _TTS_RETRY = 3
 
 def _fail(task_id: str, url: str, title: str | None, e: Exception) -> None:
@@ -80,7 +80,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
         # 4. chunk → units.json(朗读单元)
         if start_stage <= Stage.CHUNK:
             tasks.set(task_id, stage_index=int(Stage.CHUNK))
-            units_out = chunk(units, Settings.DUB_CHUNK_MAX)
+            units_out = chunk(units, DUB.CHUNK_MAX)
             if not units_out:
                 raise ValueError("转写结果为空,无可合成内容")
             ckp.write_stage_data(task_id, Stage.SYNTH, units_out)
@@ -124,11 +124,11 @@ async def _transcribe(audio: bytes, task_id: str) -> list[str]:
 
     y = await asyncio.to_thread(load_audio, audio)
     duration = len(y) / _SR
-    if duration > Settings.ASR_LONG_MAX_DURATION_S:
+    if duration > ASR.LONG_MAX_DURATION_S:
         raise ValueError(
-            f"音频 {duration/3600:.1f}h 超过上限 {Settings.ASR_LONG_MAX_DURATION_S/3600:.0f}h")
+            f"音频 {duration/3600:.1f}h 超过上限 {ASR.LONG_MAX_DURATION_S/3600:.0f}h")
 
-    if duration < Settings.ASR_LONG_THRESHOLD_S:
+    if duration < ASR.LONG_THRESHOLD_S:
         # 短路整段:拿全文单元素(无停顿边界,chunker 兜底)
         pcm = (np.clip(y, -1.0, 1.0) * 32767).astype("<i2").tobytes()
         async with gate.short_lease(task_id):

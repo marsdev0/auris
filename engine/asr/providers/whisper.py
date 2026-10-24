@@ -8,7 +8,7 @@ from faster_whisper import WhisperModel
 from engine.asr.audio import load_audio
 from engine.asr.provider import AsrCapability
 from engine.asr.schemas import AsrResult, AsrSegment, AsrWord, PartialResult
-from engine.config import Settings
+from engine.config import ASR
 
 
 class FasterWhisperProvider:
@@ -17,9 +17,9 @@ class FasterWhisperProvider:
 
     def __init__(self) -> None:
         self._model = WhisperModel(
-            Settings.ASR_MODEL,
-            device=Settings.ASR_DEVICE,
-            compute_type=Settings.ASR_COMPUTE
+            ASR.MODEL,
+            device=ASR.DEVICE,
+            compute_type=ASR.COMPUTE
         )
 
     async def transcribe(self, audio: bytes, lang: str | None = None) -> AsrResult:
@@ -30,11 +30,11 @@ class FasterWhisperProvider:
         y = load_audio(audio)
         segments, info = self._model.transcribe(
             y,
-            language=lang or Settings.ASR_LANG or None,   # 空=auto 检测(D4:ASR 出源语,翻译归 LLM)
+            language=lang or ASR.LANG or None,   # 空=auto 检测(D4:ASR 出源语,翻译归 LLM)
             vad_filter=True,
             beam_size=5,
             word_timestamps=False,
-            initial_prompt=Settings.ASR_INITIAL_PROMPT
+            initial_prompt=ASR.INITIAL_PROMPT
         )
         segs = [
             AsrSegment(start=s.start, end=s.end, text=s.text,

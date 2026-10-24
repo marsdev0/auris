@@ -22,9 +22,9 @@ from dataclasses import dataclass
 
 from loguru import logger
 
-from engine.config import Settings
+from engine.config import ASR
 
-assert Settings.ASR_GATE_TOTAL > Settings.ASR_GATE_RESERVE > 0, \
+assert ASR.GATE_TOTAL > ASR.GATE_RESERVE > 0, \
     "启动校验(§3.3):ASR_GATE_TOTAL > ASR_GATE_RESERVE > 0(M=R 意味批量零并发,静默死锁)"
 
 
@@ -34,8 +34,8 @@ class QueueFullError(Exception):
 
 # ==================== 模式一:双信号量(Step ①,§3) ====================
 
-SEM_TOTAL = asyncio.Semaphore(Settings.ASR_GATE_TOTAL)          # M
-SEM_BATCH = asyncio.Semaphore(Settings.ASR_GATE_TOTAL - Settings.ASR_GATE_RESERVE)
+SEM_TOTAL = asyncio.Semaphore(ASR.GATE_TOTAL)          # M
+SEM_BATCH = asyncio.Semaphore(ASR.GATE_TOTAL - ASR.GATE_RESERVE)
 
 
 # ==================== 模式二:PriorityGate(Step ③,§5) ====================
@@ -86,10 +86,10 @@ class PriorityGate:
     """有界优先级队列闸门。核心不变式(§5.3):inflight < M ⟺ waiters 空(或全员被 cap 卡住)。"""
 
     def __init__(self) -> None:
-        self._capacity = Settings.ASR_GATE_TOTAL
-        self._queue_max = Settings.ASR_GATE_QUEUE_MAX
-        self._age_s = Settings.ASR_GATE_AGE_S
-        self._task_cap = Settings.ASR_TASK_CONCURRENCY
+        self._capacity = ASR.GATE_TOTAL
+        self._queue_max = ASR.GATE_QUEUE_MAX
+        self._age_s = ASR.GATE_AGE_S
+        self._task_cap = ASR.TASK_CONCURRENCY
         self._waiters: list[_Waiter] = []
         self._inflight = 0
         self._inflight_by_task: dict[str, int] = {}
@@ -183,11 +183,11 @@ class PriorityGate:
 
 # ==================== 模式分发(§5.7,收编点无感知) ====================
 
-_GATE: PriorityGate | None = PriorityGate() if Settings.ASR_GATE_MODE == "priority" else None
-logger.info(f"gate 模式: {Settings.ASR_GATE_MODE}"
-            f"(M={Settings.ASR_GATE_TOTAL}"
-            + (f", queue_max={Settings.ASR_GATE_QUEUE_MAX})" if _GATE
-               else f", R={Settings.ASR_GATE_RESERVE})"))
+_GATE: PriorityGate | None = PriorityGate() if ASR.GATE_MODE == "priority" else None
+logger.info(f"gate 模式: {ASR.GATE_MODE}"
+            f"(M={ASR.GATE_TOTAL}"
+            + (f", queue_max={ASR.GATE_QUEUE_MAX})" if _GATE
+               else f", R={ASR.GATE_RESERVE})"))
 
 
 @asynccontextmanager
@@ -195,9 +195,9 @@ async def sync_lease():
     """同步路径:priority 0。有界等待(§5.4):超时抛 QueueFullError → router 映射 429。"""
     if _GATE is None:
         try:
-            await asyncio.wait_for(SEM_TOTAL.acquire(), timeout=Settings.ASR_SYNC_MAX_WAIT_S)
+            await asyncio.wait_for(SEM_TOTAL.acquire(), timeout=ASR.SYNC_MAX_WAIT_S)
         except asyncio.TimeoutError:
-            raise QueueFullError(f"sync 等待超时(>{Settings.ASR_SYNC_MAX_WAIT_S}s)")
+            raise QueueFullError(f"sync 等待超时(>{ASR.SYNC_MAX_WAIT_S}s)")
         try:
             yield
         finally:
@@ -206,10 +206,10 @@ async def sync_lease():
         try:
             lease = await asyncio.wait_for(
                 _GATE.acquire(GateRequest(0, None, "sync")),
-                timeout=Settings.ASR_SYNC_MAX_WAIT_S)
+                timeout=ASR.SYNC_MAX_WAIT_S)
         except asyncio.TimeoutError:
             # 超时 cancel 走 acquire 的取消安全分支(§5.5):中签则还位,未中签则摘除,不泄漏
-            raise QueueFullError(f"sync 等待超时(>{Settings.ASR_SYNC_MAX_WAIT_S}s)")
+            raise QueueFullError(f"sync 等待超时(>{ASR.SYNC_MAX_WAIT_S}s)")
         try:
             yield
         finally:
@@ -250,8 +250,8 @@ def stats() -> dict:
         return _GATE.stats()
     return {
         "mode": "semaphore",
-        "capacity": Settings.ASR_GATE_TOTAL,
-        "inflight": Settings.ASR_GATE_TOTAL - SEM_TOTAL._value,
-        "batch_inflight": (Settings.ASR_GATE_TOTAL - Settings.ASR_GATE_RESERVE) - SEM_BATCH._value,
+        "capacity": ASR.GATE_TOTAL,
+        "inflight": ASR.GATE_TOTAL - SEM_TOTAL._value,
+        "batch_inflight": (ASR.GATE_TOTAL - ASR.GATE_RESERVE) - SEM_BATCH._value,
         "note": "semaphore 模式无队列/分位数观测,切 priority 后有 wait_ms/hold_ms",
     }

@@ -24,14 +24,14 @@ from engine.asr.provider import AsrCapability
 from engine.asr.schemas import PartialResult
 from engine.asr.service import get_asr_service
 from engine.asr.vad import get_vad_engine
-from engine.config import Settings
+from engine.config import ASR
 
 _VAD_WINDOW = 512  # silero 16k 固定窗口 = 512 样本(32ms),模型写死,喂其他长度直接报错
 _MAX_SEG_SAMPLES = 15_000 * 16  # 强切段上限(15s):用户不停顿就等不到 end 事件
 # 静音期护栏:不在语音中时,已喂的静音最多回留这么多样本。
 # silero 的 start 时间戳最多回看 speech_pad + 一个窗口(默认 480+512=992 样本),
 # 保留 pad + 两个窗口,保证任何 start 时间戳都不会因提前丢弃而被截。
-_SILENCE_GUARD = Settings.ASR_VAD_SPEECH_PAD_MS * 16 + _VAD_WINDOW * 2
+_SILENCE_GUARD = ASR.VAD_SPEECH_PAD_MS * 16 + _VAD_WINDOW * 2
 
 
 class _Segment(NamedTuple):

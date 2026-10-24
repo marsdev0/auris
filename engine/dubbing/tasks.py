@@ -57,12 +57,11 @@ async def submit(url: str) -> str:
 async def cleanup_expired() -> None:
     while True:
         now = time.time()
-        from engine.config import Settings
-        ttl = Settings.DUB_TASK_TTL_H * 3600
+        ttl = DUB.TASK_TTL_H * 3600
         expired = [tid for tid, t in _tasks.items() if now - t.updated_at > ttl]
         for tid in expired:
             _tasks.pop(tid)
-            shutil.rmtree(Settings.DUB_DIR / tid, ignore_errors=True)  # 整任务目录:快照+产物一起回收
+            shutil.rmtree(DUB.DIR / tid, ignore_errors=True)  # 整任务目录:快照+产物一起回收
         if expired:
             logger.info(f"清理过期播报任务 {len(expired)} 个")
         await asyncio.sleep(3600)

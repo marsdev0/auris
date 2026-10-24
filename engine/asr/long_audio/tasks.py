@@ -27,9 +27,9 @@ from engine.asr.long_audio.assembler import Assembler, LongTaskResult
 from engine.asr.long_audio.scheduler import Scheduler
 from engine.asr.long_audio.segmenter import Segmenter
 from engine.asr.service import get_asr_service
-from engine.config import Settings
+from engine.config import ASR
 
-_SR = Settings.ASR_SAMPLE_RATE
+_SR = ASR.SAMPLE_RATE
 
 
 class LongTask(BaseModel):
@@ -56,7 +56,7 @@ class LongTask(BaseModel):
 
 # ---- 内存任务表(模块级单例;TTL 清理见 cleanup_expired) ----
 _tasks: dict[str, LongTask] = {}
-_TTL_S = Settings.ASR_TASK_TTL_H * 3600
+_TTL_S = ASR.TASK_TTL_H * 3600
 
 
 def get_task(task_id: str) -> LongTask | None:
@@ -103,15 +103,15 @@ async def _run(task_id: str, audio: bytes, provider_name: str | None) -> None:
         _set(task_id, "decoding", 5)
         y = await asyncio.to_thread(load_audio, audio)
         duration = len(y) / _SR
-        if duration > Settings.ASR_LONG_MAX_DURATION_S:
+        if duration > ASR.LONG_MAX_DURATION_S:
             raise ValueError(
-                f"音频 {duration/3600:.1f}h 超过上限 {Settings.ASR_LONG_MAX_DURATION_S/3600:.0f}h")
+                f"音频 {duration/3600:.1f}h 超过上限 {ASR.LONG_MAX_DURATION_S/3600:.0f}h")
         # 短路整段路径直接复用这份 y(转 PCM 送转写);长路径分段器
         # 自己再解码一次(它要完整 float32 做能量对齐),这份就地放掉
-        if duration >= Settings.ASR_LONG_THRESHOLD_S:
+        if duration >= ASR.LONG_THRESHOLD_S:
             del y
 
-        if duration < Settings.ASR_LONG_THRESHOLD_S:
+        if duration < ASR.LONG_THRESHOLD_S:
             # ---- 短音频:整段(复用①非流式,但共享全局信号量——
             #      不让大文件插队挤占长任务之外的实时流量) ----
             # 注意:不能把原始字节直接送 provider——mp4/m4a 等容器

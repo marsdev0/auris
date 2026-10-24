@@ -24,7 +24,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from engine.config import Settings
+from engine.config import DUB
 from engine.dubbing.types import DubStatus, Stage
 
 _V = 1
@@ -38,7 +38,7 @@ _DATA_FILE = {
 
 
 def task_dir(task_id: str) -> Path:
-    return Settings.DUB_DIR / task_id
+    return DUB.DIR / task_id
 
 
 def save_checkpoint(task_id: str, *, url: str, stage_index: int,
@@ -88,9 +88,9 @@ def read_stage_data(task_id: str, stage_index: Stage) -> list[str] | None:
 def scan_pending() -> list[str]:
     """启动扫描: status==running 的任务——kill -9 时 checkpoint 停留 running。"""
     out: list[str] = []
-    if not Settings.DUB_DIR.exists():
+    if not DUB.DIR.exists():
         return out
-    for d in Settings.DUB_DIR.iterdir():
+    for d in DUB.DIR.iterdir():
         p = d / "checkpoint.json"
         if not p.is_file():
             continue

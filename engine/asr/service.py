@@ -1,7 +1,7 @@
 # Copyright (c) 2026 marsdev0
 # Licensed under the MIT License. See the LICENSE file for details.
 from engine.asr.provider import ProviderRegistry, AsrProvider
-from engine.config import Settings
+from engine.config import ASR
 
 
 class AsrService:
@@ -21,7 +21,7 @@ class AsrService:
                 self.registry.register(mod.PROVIDER())
 
     def get(self, provider : str | None = None) -> AsrProvider:
-        return self.registry.get(provider, Settings.ASR_DEFAULT_PROVIDER)
+        return self.registry.get(provider, ASR.DEFAULT_PROVIDER)
 
 _service: AsrService | None = None
 

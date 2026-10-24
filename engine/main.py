@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from engine.config import Settings
+from engine.config import APP
 from engine.asr.router import router as asr_router
 from engine.sources.router import router as sources_router
 from engine.byok.router import router as byok_router
@@ -22,8 +22,8 @@ from engine.dubbing.router import router as dub_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"{Settings.APP_NAME} v{Settings.APP_VERSION} 启动中...")
-    logger.info(f"服务地址: http://{Settings.HOST}:{Settings.PORT}")
+    logger.info(f"{APP.NAME} v{APP.VERSION} 启动中...")
+    logger.info(f"服务地址: http://{APP.HOST}:{APP.PORT}")
 
     from engine.asr.service import get_asr_service
     svc = get_asr_service()
@@ -53,15 +53,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
-    title=Settings.APP_NAME,
-    version=Settings.APP_VERSION,
-    debug=Settings.DEBUG,
+    title=APP.NAME,
+    version=APP.VERSION,
+    debug=APP.DEBUG,
     description="Auris AI engine",
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=Settings.ALLOW_ORIGINS,
+    allow_origins=APP.ALLOW_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -75,12 +75,12 @@ app.include_router(dub_router)
 
 @app.get("/")
 async def root():
-    return {"service": Settings.APP_NAME, "version": Settings.APP_VERSION, "status": "running"}
+    return {"service": APP.NAME, "version": APP.VERSION, "status": "running"}
 
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": Settings.APP_NAME}
+    return {"status": "healthy", "service": APP.NAME}
 
 
 if __name__ == "__main__":
@@ -88,8 +88,8 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "engine.main:app",
-        host=Settings.HOST,
-        port=Settings.PORT,
-        reload=Settings.DEBUG,
+        host=APP.HOST,
+        port=APP.PORT,
+        reload=APP.DEBUG,
         log_level="info",
     )

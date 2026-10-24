@@ -16,7 +16,7 @@ from engine.asr.provider import AsrCapability
 from loguru import logger
 
 from engine.asr.schemas import AsrResult, PartialResult
-from engine.config import Settings
+from engine.config import ASR
 
 _START_TIMEOUT_S = 10.0  # 等 task-started 的上限,超时按协议错误处理
 
@@ -49,7 +49,7 @@ class QwenAudioStreamingProvider:
     capabilities = {AsrCapability.STREAMING}
 
     def __init__(self):
-        if not Settings.ASR_QAS_API_KEY:
+        if not ASR.QAS_API_KEY:
             logger.warning("ASR_QAS_API_KEY 未配置, qwen3-realtime 将无法建链")
 
     async def transcribe(self, audio: bytes, lang: str | None = None) -> AsrResult:
@@ -63,8 +63,8 @@ class QwenAudioStreamingProvider:
         """
         task_id = uuid.uuid4().hex[:32]
         t0 = time.monotonic()
-        headers = {"Authorization": f"Bearer {Settings.ASR_QAS_API_KEY}"}
-        async with websockets.connect(Settings.ASR_QAS_BASE_URL,
+        headers = {"Authorization": f"Bearer {ASR.QAS_API_KEY}"}
+        async with websockets.connect(ASR.QAS_BASE_URL,
                                       additional_headers=headers,
                                       proxy=None) as ws:  # 国内端点直连;不显式禁用时 websockets 会探测系统代理,本地挂了 SOCKS 代理(如 127.0.0.1:7897)就要求 python-socks 依赖并炸
             logger.info("ws#3 connected %.0fms", (time.monotonic() - t0) * 1000)
@@ -87,9 +87,9 @@ class QwenAudioStreamingProvider:
         """发 run-task(带全部断句/保活参数)。task-started 由主循环分流,这里只发。"""
         params: dict = {
             "format": "pcm",
-            "sample_rate": Settings.ASR_SAMPLE_RATE,
-            "heartbeat": Settings.ASR_QAS_HEARTBEAT,
-            "max_sentence_silence": Settings.ASR_QAS_SILENCE_MS,
+            "sample_rate": ASR.SAMPLE_RATE,
+            "heartbeat": ASR.QAS_HEARTBEAT,
+            "max_sentence_silence": ASR.QAS_SILENCE_MS,
         }
         if lang:
             params["language_hints"] = [lang]
@@ -104,7 +104,7 @@ class QwenAudioStreamingProvider:
                 "task_group": "audio",
                 "task": "asr",
                 "function": "recognition",
-                "model": Settings.ASR_QAS_MODEL,
+                "model": ASR.QAS_MODEL,
                 "parameters": params,
                 "input": {},
             },

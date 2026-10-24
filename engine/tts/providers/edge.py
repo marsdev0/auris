@@ -1,7 +1,7 @@
 import re
 
 from engine.asr.audio import pcm_to_wav
-from engine.config import Settings
+from engine.config import TTS
 from engine.tts.provider import SynthResult
 from loguru import logger
 
@@ -27,7 +27,7 @@ class EdgeTtsProvider:
         # 延迟导入:依赖缺失时仅 tts 域受影响,engine 其余路由不受牵连
         import edge_tts
         buf = bytearray()
-        communicate = edge_tts.Communicate(cleaned, voice or Settings.TTS_DEFAULT_VOICE)
+        communicate = edge_tts.Communicate(cleaned, voice or TTS.DEFAULT_VOICE)
         async for chunk in communicate.stream():
             logger.info(f"synthesize {chunk}")
             if chunk["type"] == "audio":

@@ -30,7 +30,7 @@ from engine.asr import gate
 from engine.asr.audio import pcm_to_wav
 from engine.asr.long_audio.segmenter import Seg
 from engine.asr.provider import AsrProvider
-from engine.config import Settings
+from engine.config import ASR
 
 
 @dataclass
@@ -76,13 +76,13 @@ class Scheduler:
             async with gate.segment_lease(task_id):
                 t0 = asyncio.get_running_loop().time()
                 last_err: Exception | None = None
-                for attempt in range(1, Settings.ASR_SEG_RETRY + 1):
+                for attempt in range(1, ASR.SEG_RETRY + 1):
                     try:
                         # 裸 PCM 包 WAV 头(provider.transcribe 契约是"任意格式字节",
                         # 与流式路径 stream_handler._transcribe 同一条路)
                         res = await asyncio.wait_for(
                             provider.transcribe(pcm_to_wav(seg.pcm)),
-                            timeout=Settings.ASR_SEG_TIMEOUT_S,
+                            timeout=ASR.SEG_TIMEOUT_S,
                         )
                         latency = (asyncio.get_running_loop().time() - t0) * 1000
                         await self._notify(on_done, seg.index, True)
@@ -93,12 +93,12 @@ class Scheduler:
                     except Exception as e:  # 含 TimeoutError;段级隔离,不冒泡
                         last_err = e
                         logger.warning(
-                            f"seg#{seg.index} 第{attempt}/{Settings.ASR_SEG_RETRY}次失败: {e}")
-                        if attempt < Settings.ASR_SEG_RETRY:
+                            f"seg#{seg.index} 第{attempt}/{ASR.SEG_RETRY}次失败: {e}")
+                        if attempt < ASR.SEG_RETRY:
                             # 重试退避:base×2^(n-1)+jitter(重试间仍持闸门,
                             # 防断连重试瞬间新旧请求并行占用下游容量)
                             await asyncio.sleep(
-                                Settings.ASR_RETRY_BACKOFF_BASE_S * 2 ** (attempt - 1)
+                                ASR.RETRY_BACKOFF_BASE_S * 2 ** (attempt - 1)
                                 + random.uniform(0, 0.5))
 
                 latency = (asyncio.get_running_loop().time() - t0) * 1000

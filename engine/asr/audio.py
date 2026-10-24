@@ -7,7 +7,7 @@ import wave
 import numpy as np
 import librosa
 
-from engine.config import Settings
+from engine.config import ASR
 
 
 def load_audio(data: bytes) -> np.ndarray:
@@ -17,7 +17,7 @@ def load_audio(data: bytes) -> np.ndarray:
     → 不认识的容器(mp4/m4a/mkv 等视频)走 ffmpeg 子进程兜底,输出裸 PCM
     再自包 WAV 头喂回 librosa——对调用方完全透明。"""
     try:
-        y, _ = librosa.load(io.BytesIO(data), sr=Settings.ASR_SAMPLE_RATE, mono=True)
+        y, _ = librosa.load(io.BytesIO(data), sr=ASR.SAMPLE_RATE, mono=True)
         return y.astype(np.float32)
     except Exception:
         return _ffmpeg_decode(data)
@@ -28,17 +28,17 @@ def _ffmpeg_decode(data: bytes) -> np.ndarray:
     proc = subprocess.run(
         ["ffmpeg", "-hide_banner", "-loglevel", "error",
          "-i", "pipe:0",           # 从 stdin 读
-         "-f", "wav", "-ac", "1", "-ar", str(Settings.ASR_SAMPLE_RATE),
+         "-f", "wav", "-ac", "1", "-ar", str(ASR.SAMPLE_RATE),
          "pipe:1"],
         input=data, capture_output=True,
     )
     if proc.returncode != 0:
         raise ValueError(f"音频解码失败(ffmpeg): {proc.stderr.decode(errors='ignore')[:200]}")
-    y, _ = librosa.load(io.BytesIO(proc.stdout), sr=Settings.ASR_SAMPLE_RATE, mono=True)
+    y, _ = librosa.load(io.BytesIO(proc.stdout), sr=ASR.SAMPLE_RATE, mono=True)
     return y.astype(np.float32)
 
 
-def pcm_to_wav(pcm: bytes, sample_rate: int = Settings.ASR_SAMPLE_RATE) -> bytes:
+def pcm_to_wav(pcm: bytes, sample_rate: int = ASR.SAMPLE_RATE) -> bytes:
     """裸 PCM(16bit LE mono)→ WAV 容器字节。
 
     流式切出的段没有文件头,而 provider.transcribe() 的契约是"任意格式字节"

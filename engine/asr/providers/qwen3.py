@@ -7,7 +7,7 @@ from openai import AsyncOpenAI
 
 from engine.asr.provider import AsrCapability
 from engine.asr.schemas import AsrResult, PartialResult, AsrSegment, AsrWord
-from engine.config import Settings
+from engine.config import ASR
 
 # OpenAI 兼容接口按文件名后缀识别音频格式，统一按 wav 上送
 _UPLOAD_FILENAME = "audio.wav"
@@ -23,8 +23,8 @@ class Qwen3AsrProvider:
 
     def __init__(self):
         self._client = AsyncOpenAI(
-            base_url=Settings.ASR_QWEN3_BASE_URL,
-            api_key=Settings.ASR_QWEN3_API_KEY
+            base_url=ASR.QWEN3_BASE_URL,
+            api_key=ASR.QWEN3_API_KEY
         )
 
     async def transcribe(self, audio: bytes, lang: str | None = None) -> AsrResult:
@@ -32,8 +32,8 @@ class Qwen3AsrProvider:
         buf.name = _UPLOAD_FILENAME
         resp = await self._client.audio.transcriptions.create(
             file=buf,
-            model=Settings.ASR_QWEN3_MODEL,
-            language=lang or Settings.ASR_LANG or None,   # 空=auto 检测(D4:ASR 出源语,翻译归 LLM)
+            model=ASR.QWEN3_MODEL,
+            language=lang or ASR.LANG or None,   # 空=auto 检测(D4:ASR 出源语,翻译归 LLM)
             response_format="verbose_json"
         )
         self._dump_resp(resp)  # 调试用:不想打印时注释掉这一行
