@@ -24,19 +24,27 @@ from engine.dubbing.router import router as dub_router
 async def lifespan(app: FastAPI):
     logger.info(f"{Settings.APP_NAME} v{Settings.APP_VERSION} 启动中...")
     logger.info(f"服务地址: http://{Settings.HOST}:{Settings.PORT}")
+
     from engine.asr.service import get_asr_service
     svc = get_asr_service()
     logger.info(f"已注册 ASR provider: {svc.registry.names()}")
+
     from engine.asr.vad import get_vad_engine
     get_vad_engine()  # 预热 VAD(分段与流式共用单例)
+
     from engine.llm.client import warn_if_unconfigured
     warn_if_unconfigured()  # LLM 空配置提醒:不拦启动,只告警
+
     from engine.asr.long_audio.tasks import cleanup_expired
     cleanup_task = asyncio.create_task(cleanup_expired())  # TTL 清理(启动一轮+每小时)
+
     from engine.dubbing.concat import ensure_ffmpeg
     ensure_ffmpeg()
+
     from engine.dubbing import tasks as dub_tasks
     dub_cleanup = asyncio.create_task(dub_tasks.cleanup_expired())
+    await dub_tasks.resume_pending()
+
     yield
     cleanup_task.cancel()
     dub_cleanup.cancel()

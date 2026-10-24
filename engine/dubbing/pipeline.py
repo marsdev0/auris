@@ -2,7 +2,7 @@
 
 """
 import asyncio
-from pathlib import Path
+import shutil
 
 import numpy as np
 from loguru import logger
@@ -15,63 +15,107 @@ from engine.asr.long_audio.segmenter import Segmenter
 from engine.asr.service import get_asr_service
 from engine.config import Settings
 from engine.dubbing import tasks
+from engine.dubbing import checkpoint as ckp
 from engine.dubbing.chunker import chunk
 from engine.dubbing.concat import concat_mp3
 from engine.dubbing.tasks import DubStatus
+from engine.dubbing import translate as tsl
+from engine.dubbing.types import Stage
+
 from engine.tts.service import get_tts_service
 
 _SR = Settings.ASR_SAMPLE_RATE
 _TTS_RETRY = 3
 
-async def _run(task_id: str, url: str) -> None:
+def _fail(task_id: str, url: str, title: str | None, e: Exception) -> None:
+    tasks.set(task_id, DubStatus.FAILED, error=str(e))
+    t = tasks.get_task(task_id)
+    try:
+        ckp.save_checkpoint(task_id, url=url, title=title,
+                        stage_index=t.stage_index if t else 0, status=DubStatus.FAILED)
+    except Exception:
+        pass  # 落盘失败不掩盖原错误
+
+async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> None:
     """任务执行体，任务stage异常 -> failed"""
     from engine.sources import fetch_source
     from engine.sources.base import SourceError
+
+    prev = ckp.load_checkpoint(task_id)
+    title = prev.get("title") if prev else None
+    tdir = ckp.task_dir(task_id)
+    tdir.mkdir(parents=True, exist_ok=True)
+    tasks.set(task_id, DubStatus.RUNNING, stage_index = int(start_stage), title=title)
+
     try:
-        # stage 1: 下载音频
-        tasks._set(task_id, DubStatus.RUNNING, stage_index=0)
-        src = await fetch_source(url)
-        tasks._set(task_id, title=src.title)
-        audio = src.audio_path.read_bytes()
-        # 临时文件用完即删
-        src.audio_path.unlink(missing_ok=True)
+        # 1. download → src.bin(常驻任务目录,终态+TTL 才清)
+        if start_stage <= Stage.DOWNLOAD:
+            src = await fetch_source(url)
+            title = src.title
+            tasks.set(task_id, title=title)
+            shutil.copyfile(src.audio_path, tdir / "src.bin")
+            src.audio_path.unlink(missing_ok=True)  # 临时文件用完即删
+            ckp.save_checkpoint(task_id, url=url, stage_index=Stage.TRANSCRIBE, title=title)
 
-        # stage 2: 转写
-        tasks._set(task_id, stage_index=1)
-        units = await _transcribe(audio, task_id)
+        # 2. transcribe → transcript.json(英文段)
+        if start_stage <= Stage.TRANSCRIBE:
+            tasks.set(task_id, stage_index=int(Stage.TRANSCRIBE))
+            audio = (tdir / "src.bin").read_bytes()
+            units = await _transcribe(audio, task_id)
+            ckp.write_stage_data(task_id, Stage.TRANSLATE, units)
+            ckp.save_checkpoint(task_id, url=url, stage_index=Stage.TRANSLATE, title=title)
+        else:
+            # 说明已经转写了
+            units = ckp.read_stage_data(task_id, Stage.TRANSLATE)
 
-        # stage 3: chunk段文本 <= limit 朗读单元
-        tasks._set(task_id, stage_index=2)
-        chunks_out = chunk(units, Settings.DUB_CHUNK_MAX)
-        if not chunks_out:
-            raise ValueError("转写结果为空,无可合成内容")
+        # 3. translate → translation.json(中文段;中文源内部直通)
+        if start_stage <= Stage.TRANSLATE:
+            tasks.set(task_id, stage_index=int(Stage.TRANSLATE))
+            units = await tsl.translate(units)
+            ckp.write_stage_data(task_id, Stage.CHUNK, units)
+            ckp.save_checkpoint(task_id, url=url, stage_index=Stage.CHUNK, title=title)
+        else:
+            units = ckp.read_stage_data(task_id, Stage.CHUNK)
 
-        # stage 4: synth 串行逐段合成
-        tasks._set(task_id, stage_index=3)
-        out_dir = Settings.DUB_DIR / task_id / "chunks"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        parts: list[Path] = []
-        provider = get_tts_service().get()
-        for i, text in enumerate(chunks_out):
-            result = await _synth_with_retry(provider, text)
-            p = out_dir / f"{i:04d}.mp3"
-            p.write_bytes(result.audio)
-            parts.append(p)
+        # 4. chunk → units.json(朗读单元)
+        if start_stage <= Stage.CHUNK:
+            tasks.set(task_id, stage_index=int(Stage.CHUNK))
+            units_out = chunk(units, Settings.DUB_CHUNK_MAX)
+            if not units_out:
+                raise ValueError("转写结果为空,无可合成内容")
+            ckp.write_stage_data(task_id, Stage.SYNTH, units_out)
+            ckp.save_checkpoint(task_id, url=url, stage_index=Stage.SYNTH, title=title)
+        else:
+            units_out = ckp.read_stage_data(task_id, Stage.SYNTH)
 
-        # stage 5: concat
-        tasks._set(task_id, stage_index=4)
-        final = out_dir.parent / "narration.mp3"
+        # 5. synth → chunks/*.mp3(stage 级粒度:resume 整段重跑,覆盖写)
+        if start_stage <= Stage.SYNTH:
+            tasks.set(task_id, stage_index=int(Stage.SYNTH))
+            out_dir = tdir / "chunks"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            provider = get_tts_service().get()
+            for i, text in enumerate(units_out):
+                result = await _synth_with_retry(provider, text)
+                (out_dir / f"{i:04d}.mp3").write_bytes(result.audio)
+            ckp.save_checkpoint(task_id, url=url, stage_index=Stage.CONCAT, title=title)
+
+        # 6. concat → narration.mp3(终态先落盘,清理放最后)
+        tasks.set(task_id, stage_index=int(Stage.CONCAT))
+        parts = sorted((tdir / "chunks").glob("*.mp3"))  # 从盘上取,不依赖前分支变量
+        final = tdir / "narration.mp3"
         await concat_mp3(parts, final)
+        ckp.save_checkpoint(task_id, url=url, stage_index=len(Stage), status=DubStatus.COMPLETED, title=title)
         for p in parts:
             p.unlink(missing_ok=True)
-        out_dir.rmdir()
-        tasks._set(task_id, DubStatus.COMPLETED, stage_index=5,
-                   audio_path=str(final), audio_bytes=final.stat().st_size)
-        logger.info(f"播报任务 {task_id} 完成: {len(parts)} 段, {final.stat().st_size}B")
+        cd = tdir / "chunks"
+        if cd.exists():
+            cd.rmdir()
+        tasks.set(task_id, DubStatus.COMPLETED, stage_index=len(Stage), audio_path=str(final), audio_bytes=final.stat().st_size)
+        logger.info(f"播报任务 {task_id} 完成: {final.stat().st_size}B")
     except SourceError as e:
-        tasks._set(task_id, DubStatus.FAILED, error=str(e))
+        _fail(task_id, url, title, e)
     except Exception as e:
-        tasks._set(task_id, DubStatus.FAILED, error=str(e))
+        _fail(task_id, url, title, e)
         logger.error(f"播报任务 {task_id} 失败: {e}")
 
 async def _transcribe(audio: bytes, task_id: str) -> list[str]:
