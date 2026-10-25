@@ -23,7 +23,7 @@ public interface TranscribeConvert {
     LongTaskResp to(AsrTaskDTO dto);
 
     /**
-     * 终态记录回源:DB int 状态 → engine 字符串状态,对齐 AsrTaskDTO 的状态词
+     * Terminal-state record fallback: DB int status → engine string status, aligned with AsrTaskDTO status words
      */
     default LongTaskResp to(TranscribeRecordDO record) {
         LongTaskResp resp = new LongTaskResp();
@@ -46,7 +46,7 @@ public interface TranscribeConvert {
         RecordItemResp item = new RecordItemResp();
         item.setRecordId(String.valueOf(record.getId()));
         item.setTitle(record.getTitle());
-        // DB int 0/1/2 → 状态词,与轮询响应对齐
+        // DB int 0/1/2 → status words, aligned with the polling response
         item.setStatus(record.getStatus() == 1 ? TranscribeConst.ENGINE_STATUS_COMPLETED
                 : record.getStatus() == 2 ? TranscribeConst.ENGINE_STATUS_FAILED
                 : TranscribeConst.ENGINE_STATUS_TRANSCRIBING);

@@ -14,8 +14,8 @@ import org.apache.ibatis.annotations.Select;
 public interface UserNoticePreferenceMapper extends BaseMapper<UserNoticePreferenceDO> {
 
     /**
-     * 无偏好行时的兜底掩码:渠道实现一个开一个位(§9 2026-10-02 拍板)——
-     * 0b101=inapp+feishu(2026-10-02 飞书上线升位);email 上线后再升 0b111
+     * Fallback mask when no preference row exists: one bit per implemented channel (§9 decision 2026-10-02) —
+     * 0b101=inapp+feishu (bit promoted when Feishu launched 2026-10-02); promote to 0b111 when email ships
      */
     @Select("SELECT IFNULL(" +
             "(SELECT IF(enabled = 0, 0, channel_mask) FROM user_notice_preference WHERE user_id = #{userId} AND type = #{type}), " +

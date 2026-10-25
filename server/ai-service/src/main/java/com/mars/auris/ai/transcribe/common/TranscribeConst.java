@@ -16,14 +16,14 @@ public interface TranscribeConst {
 
     String URL_ASR_TASK_START_URL = "/v1/asr/task/start-url";
 
-    /** engine 任务状态词,与 AsrTaskDTO.status 注释对齐 */
+    /** Engine task status words, aligned with AsrTaskDTO.status comments */
     String ENGINE_STATUS_TRANSCRIBING = "transcribing";
 
     String ENGINE_STATUS_COMPLETED = "completed";
 
     String ENGINE_STATUS_FAILED = "failed";
 
-    /** record 提交入口(transcribe_record.source,主导语义是入口,同步异步是各入口的附带模式) */
+    /** Record submission entry (transcribe_record.source; the primary semantics is the entry point, sync/async is a per-entry mode) */
     int SOURCE_UPLOAD_ASYNC = 0;   // 文件上传 → 异步任务
 
     int SOURCE_UPLOAD_SYNC = 1;    // 文件上传 → 同步直返

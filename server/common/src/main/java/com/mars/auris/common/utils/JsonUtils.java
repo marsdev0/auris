@@ -14,8 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 public final class JsonUtils {
 
     /**
-     * 注册 JavaTimeModule:LocalDateTime 等时间类型默认不支持,
-     * Kafka 事件里带 occurred_at 的消息曾因此整条毒丸(2026-09-29 端到端首跑暴露)。
+     * Register JavaTimeModule: LocalDateTime and other time types are unsupported by default;
+     * a Kafka message carrying occurred_at was once poisoned by this (exposed in the 2026-09-29 end-to-end first run).
      */
     private static final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule());

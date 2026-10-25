@@ -41,7 +41,7 @@ public class RestClientConfig {
                 .build();
     }
 
-    /** BYOK 连通性实测:秒级调用,与 poll 同档超时 */
+    /** BYOK connectivity live check: sub-second calls, same timeout tier as poll */
     @Bean
     @Qualifier("engineByok")
     public RestClient engineByokRestClient(RestClient.Builder builder) {
@@ -51,7 +51,7 @@ public class RestClientConfig {
                 .build();
     }
 
-    /** 配音产物流式代理(D6):文件下载档,read 60s */
+    /** Dubbing artifact streaming proxy (D6): file-download tier, read 60s */
     @Bean
     @Qualifier("engineAsset")
     public RestClient engineAssetRestClient(RestClient.Builder builder) {

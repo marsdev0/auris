@@ -46,7 +46,7 @@ public interface TranscribeRecordMapper extends BaseMapper<TranscribeRecordDO> {
     @Delete("DELETE FROM transcribe_record WHERE id = #{id} AND user_id = #{userId}")
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
-    /** 超时明细查询:逐条 fail+发事件(批量 UPDATE 拿不到 userId/recordId,发不了 auris-event) */
+    /** Timeout detail query: fail + emit event row by row (batch UPDATE can't get userId/recordId, can't emit auris-event) */
     @Select("SELECT id, user_id, title FROM transcribe_record " +
             "WHERE status = 0 AND created_at < #{cutoff} LIMIT 500")
     List<TranscribeRecordDO> selectTimeoutRecords(@Param("cutoff") LocalDateTime cutoff);

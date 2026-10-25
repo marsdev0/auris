@@ -22,34 +22,34 @@ public class UserDO {
     private Long id;
 
     /**
-     * 用户名
+     * Username
      */
     private String username;
 
     /**
-     * BCrypt加密密码
+     * BCrypt-hashed password
      */
     private String password;
 
     /**
-     * 昵称
+     * Nickname
      */
     private String nickname;
 
     private String avatarUrl;
 
     /**
-     * 0-正常 1-禁用
+     * 0-normal 1-disabled
      */
     private Integer status;
 
     /**
-     * 创建时间
+     * Created at
      */
     private LocalDateTime createdAt;
 
     /**
-     * 更新时间
+     * Updated at
      */
     private LocalDateTime updatedAt;
 

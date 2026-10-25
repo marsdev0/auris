@@ -36,9 +36,9 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * 配音任务编排(D6):发起幂等 + 轮询落库 + asset 流式代理。
- * 两层轮询各管一层:本服务的 getTask 只对非终态任务回源 engine 一次并落库推进度;
- * list 纯读 DB。MySQL 是状态权威源,engine 失联(404)本地标失败,不留僵尸行。
+ * Dubbing task orchestration (D6): submit idempotency + poll-to-DB + asset streaming proxy.
+ * Two-level polling, each manages its own: getTask only calls engine once for non-terminal tasks and persists progress;
+ * list is pure DB read. MySQL is the authoritative state; engine unreachable (404) → local mark-failed, no zombie rows.
  */
 @Slf4j
 @Service
@@ -47,7 +47,7 @@ public class DubbingService {
     private static final String URL_DUB_SUBMIT = "/v1/dubbing/task";
     private static final String URL_DUB_TASK_GET = "/v1/dubbing/task/";
 
-    /** kind 粗判用(与 engine _guess_kind 同口径;精确判定以 engine 回包为准) */
+    /** For kind rough-guessing (same vocabulary as engine _guess_kind; authoritative value from engine response) */
     private static final Set<String> VIDEO_EXT = Set.of(".mp4", ".mkv", ".webm", ".mov");
 
     @Autowired
@@ -72,7 +72,7 @@ public class DubbingService {
     private EngineProperties properties;
 
     public SubmitTaskResp submitUrl(Long userId, String url) {
-        // 幂等:同 user 同 url 已有在途任务 → 拒重复发起,回已有任务
+        // Idempotency: same user + url with an in-flight task → reject duplicate submit, return the existing task
         DubbingTaskDO inflight = mapper.selectOne(Wrappers.<DubbingTaskDO>lambdaQuery()
                 .eq(DubbingTaskDO::getUserId, userId)
                 .eq(DubbingTaskDO::getUrl, url)
@@ -82,7 +82,7 @@ public class DubbingService {
             return new SubmitTaskResp(String.valueOf(inflight.getId()));
         }
 
-        // 先落库(INIT)再调 engine:任务生命周期从"用户发起"起算,engine 受理失败也留痕
+        // Insert first (INIT) then call engine: the task lifecycle starts at "user submission"; engine-accept failures also leave a trace
         DubbingTaskDO task = new DubbingTaskDO();
         task.setUserId(userId);
         task.setUrl(url.length() > 1024 ? url.substring(0, 1024) : url);
@@ -119,7 +119,7 @@ public class DubbingService {
             return to(task);   // 终态回源 DB,不打 engine
         }
         if (task.getStatus() == 0 && task.getEngineTaskId() == null) {
-            // 发起中断的孤儿(engine 调用后进程崩溃等):补终态,比永远 INIT 强
+            // Orphan from an interrupted submit (process crash after the engine call etc.): backfill terminal state, better than forever-INIT
             task.setStatus(3);
             task.setErrorMsg("发起中断(engine 未受理)");
             mapper.updateById(task);
@@ -134,7 +134,7 @@ public class DubbingService {
                     .body(new ParameterizedTypeReference<>() {
                     }));
         } catch (AurisException e) {
-            // engine TTL 过期/重启丢内存任务 → 本地标失败,别让任务永远 running
+            // Engine TTL expired / restarted and lost the in-memory task → mark failed locally; don't let it run forever
             if (Objects.equals(e.getCode(), AIErrorCode.TASK_NOT_FOUND.getCode())) {
                 task.setStatus(3);
                 task.setErrorMsg("engine 任务丢失(过期或重启)");
@@ -187,13 +187,13 @@ public class DubbingService {
                 .eq(DubbingTaskDO::getId, id)) == 0) {
             throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
         }
-        // 产物清理由 engine TTL 兜底(Java 不感知 engine 文件)
+        // Artifact cleanup is engine TTL's job (Java is unaware of engine files)
     }
 
     /**
-     * asset 流式代理(D6):校验归属+终态后转发 engine,Range/Content-Type 透传——
-     * kind=audio(mp3)|video(mp4)|srt(字幕),播放器拖进度条依赖 Range 透传。
-     * exchange 手动处理状态码:非 2xx 透传引擎状态,不让 RestClient 抛异常中断流。
+     * Asset streaming proxy (D6): verify ownership + terminal state, then forward to engine, Range/Content-Type passthrough —
+     * kind=audio(mp3)|video(mp4)|srt(subtitles); player progress-bar dragging relies on Range passthrough.
+     * exchange handles status codes manually: non-2xx passes through the engine status; RestClient exceptions don't interrupt the stream.
      */
     public void streamAsset(Long userId, Long id, String kind, String range, HttpServletResponse resp) {
         DubbingTaskDO task = findByUserIdAndId(userId, id);
@@ -272,7 +272,7 @@ public class DubbingService {
         return r;
     }
 
-    // engine 调用统一出口(照 TranscribeService.callEngine 同款纪律)
+    // Unified engine call exit (same discipline as TranscribeService.callEngine)
     private <T> EngineResp<T> callEngine(Supplier<EngineResp<T>> call) {
         EngineResp<T> result = engineClient.execute(call, DubbingService::toAurisException);
         if (result == null || !result.isSuccess()) {

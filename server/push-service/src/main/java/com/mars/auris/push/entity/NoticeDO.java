@@ -18,46 +18,46 @@ import java.time.LocalDateTime;
 public class NoticeDO {
 
     /**
-     * Snowflake ID(19 位)。
+     * Snowflake ID (19 digits).
      * <p>
-     * JSON 输出转 String:超出 JS Number 2^53,数字形态会让前端尾数变 0(P3 契约铁律 1)。
+     * JSON output as String: exceeds JS Number 2^53; numeric form would zero the frontend's tail digits (P3 contract rule 1).
      */
     @TableId(type = IdType.ASSIGN_ID)
     @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
 
     /**
-     * 提交用户,数据隔离键,分表键
+     * Submitting user, data isolation key, sharding key
      */
     private Long userId;
 
     /**
-     * 源事件ID(uuid),消费幂等键(uk_event)
+     * Source event ID (uuid), consumption idempotency key (uk_event)
      */
     private String eventId;
 
     /**
-     * 通知类型:transcribe.completed/transcribe.failed/transcribe.timeout/alert.raised...
+     * Notification type: transcribe.completed/transcribe.failed/transcribe.timeout/alert.raised...
      */
     private String type;
 
     /**
-     * 通知标题,如「转写完成:《xxx》」,落池时模板化生成
+     * Notification title, e.g. "Transcription complete: 《xxx》", templated at pool-write time
      */
     private String title;
 
     /**
-     * 通知正文(一句话摘要+recordId,点击跳转)
+     * Notification body (one-line summary + recordId, click to navigate)
      */
     private String content;
 
     /**
-     * 0-未读 1-已读
+     * 0-unread 1-read
      */
     private Integer readFlag;
 
     /**
-     * 创建时间(UTC,列表排序键)
+     * Created at (UTC, list sort key)
      */
     private LocalDateTime createdAt;
 

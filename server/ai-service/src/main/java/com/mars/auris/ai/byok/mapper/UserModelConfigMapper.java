@@ -15,7 +15,7 @@ import org.apache.ibatis.annotations.Select;
 public interface UserModelConfigMapper extends BaseMapper<UserModelConfigDO> {
 
     /**
-     * 按唯一键查询(tenant_id + user_id + domain),保存/读取配置的主入口
+     * Query by unique key (tenant_id + user_id + domain), the main entry for saving/loading configs
      */
     @Select("SELECT * FROM user_model_config " +
             "WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND domain = #{domain}")

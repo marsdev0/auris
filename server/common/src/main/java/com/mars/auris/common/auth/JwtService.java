@@ -74,16 +74,16 @@ public class JwtService {
     }
 
     /**
-     * 校验并解析 accessToken;无效/过期/类型不符返回 null。
-     * secret 选择、issuer、type=access、subject 取数全在这,调用方不得自己手搓 claims
+     * Validate and parse the accessToken; returns null on invalid/expired/type mismatch.
+     * Secret selection, issuer, type=access, subject extraction — all here; callers must not hand-roll claims
      */
     public UserPrincipal parseAccessToken(String token) {
         Claims claims = parseToken(token, false);
         if (claims == null || !"access".equals(claims.get("type"))) {
             return null;
         }
-        // subject 是签发时的字符串,parseLong 稳定;
-        // claims.get("userId", Long.class) 在小数值时拿到 Integer 会抛 RequiredTypeException
+        // The subject is a string at signing time; parseLong is stable.
+        // claims.get("userId", Long.class) yields Integer for small values and throws RequiredTypeException
         return new UserPrincipal(Long.parseLong(claims.getSubject()),
                 claims.get("username", String.class));
     }

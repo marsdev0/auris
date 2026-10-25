@@ -15,7 +15,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
 
 /**
- * 通知接口走 JWT(与 ai-service 同款);DLQ 运维接口的内部 token 认证是 P5 §2.10 挂账
+ * Notification endpoints use JWT (same as ai-service); internal token auth for the DLQ ops endpoint is deferred (P5 §2.10)
  *
  * @author geyan
  * @date 2026/9/28

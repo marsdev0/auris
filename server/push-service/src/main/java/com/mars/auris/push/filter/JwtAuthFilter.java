@@ -17,7 +17,7 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * 通知读取接口的鉴权(与 ai-service 同款:Bearer token → UserPrincipal)
+ * Auth for notification-read endpoints (same as ai-service: Bearer token → UserPrincipal)
  *
  * @author geyan
  * @date 2026/9/28

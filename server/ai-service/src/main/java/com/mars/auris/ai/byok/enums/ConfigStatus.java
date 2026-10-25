@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 
 /**
- * BYOK 配置校验状态。DB 落 int(与全库 TINYINT 纪律一致),API 出字符串枚举
+ * BYOK config validation status. DB stores int (consistent with the all-TINYINT discipline), API returns string enum
  *
  * @author geyan
  * @date 2026/10/10
@@ -32,7 +32,7 @@ public enum ConfigStatus {
     }
 
     /**
-     * DB int 转枚举,未知值抛异常拦截脏数据
+     * DB int to enum; unknown values throw to intercept dirty data
      */
     public static ConfigStatus fromCode(int code) {
         for (ConfigStatus status : values()) {

@@ -10,8 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * NoticeDO → 飞书卡片:header 按 type 着色(完成绿/失败红/超时橙/其他蓝),
- * 正文 markdown + 底部 note 标类型与时间。
+ * NoticeDO → Feishu card: header colored by type (green=complete/red=fail/orange=timeout/blue=other),
+ * body markdown + a bottom note with type and time.
  *
  * @author geyan
  * @date 2026/10/2
@@ -37,7 +37,7 @@ public final class NoticeCardBuilder {
     }
 
     /**
-     * 颜色即语义:一眼分清好坏消息
+     * Color is semantics: tell good news from bad at a glance
      */
     private static String templateOf(String type) {
         return switch (type == null ? "" : type) {

@@ -36,10 +36,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String token = header.substring(7);
             UserPrincipal principal = jwtService.parseAccessToken(token);
             if (principal != null) {
-                // 构造 Spring Security 认证对象
+                // Build the Spring Security authentication object
                 var authToken = new UsernamePasswordAuthenticationToken(principal, null, List.of());
-                // 给认证对象附加请求级别的细节（远程 IP、Session ID 等）。
-                // Spring Security 内部的一些组件会读取这些信息，比如日志审计、登录 IP 记录。这一行属于标准写法，不加也不影响认证流程。
+                // Attach request-level details to the authentication object (remote IP, Session ID, etc.).
+                // Some Spring Security internals read these (audit logging, login-IP records). Standard practice; omitting it doesn't break auth.
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }

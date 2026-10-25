@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 
 /**
- * 模型域。DB 存小写字符串(llm/tts/asr),API 出小写字符串枚举
+ * Model domain. DB stores lowercase string (llm/tts/asr), API returns lowercase string enum
  *
  * @author geyan
  * @date 2026/10/10
@@ -25,8 +25,8 @@ public enum ModelDomain {
     }
 
     /**
-     * 字符串转枚举(容忍大小写,未知值抛异常拦截脏数据)。
-     * 兼任 Jackson 反序列化工厂:前端传 "llm" 直接映射 LLM
+     * String to enum (case-tolerant, unknown values throw to intercept dirty data).
+     * Doubles as the Jackson deserialization factory: frontend "llm" maps directly to LLM
      */
     @JsonCreator
     public static ModelDomain of(String value) {

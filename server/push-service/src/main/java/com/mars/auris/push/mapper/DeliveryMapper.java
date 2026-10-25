@@ -18,13 +18,13 @@ import java.util.List;
 public interface DeliveryMapper extends BaseMapper<DeliveryDO> {
 
     /**
-     * 成功置 sent;pending(0)/sending(3) 均可闭合——重试链路(RetryScanner 认领后 status=3)也要能置 sent
+     * Set sent; both pending(0) and sending(3) can close — the retry path (claimed by RetryScanner, status=3) must also be able to reach sent
      */
     @Update("UPDATE delivery SET status = 1 WHERE id = #{id} AND status IN (0, 3)")
     void markSent(@Param("id") Long id);
 
     /**
-     * 失败置 backoff + attempt + 退避时间;条件限定在(0,3),防止迟到的失败回写覆盖已 sent/死信行
+     * Set backoff + attempt + backoff time on failure; the WHERE limits to (0,3), preventing a late failure write-back from clobbering a sent/dead-letter row
      */
     @Update("UPDATE delivery SET status = 2, attempt = #{attempt}, next_retry_at = #{nextRetryAt} "
             + "WHERE id = #{id} AND status IN (0, 3)")
@@ -32,8 +32,8 @@ public interface DeliveryMapper extends BaseMapper<DeliveryDO> {
                    @Param("nextRetryAt") LocalDateTime nextRetryAt);
 
     /**
-     * 到点待重试的候选(2-backoff 且已到期且未耗尽)
-     * 时间由 Java 传入(JVM UTC),与 markRetry 写入同源——不用 DB 的 NOW(),避开时区错位
+     * Due-retry candidates (2-backoff, expired, not exhausted)
+     * Time comes from Java (JVM UTC), same source as markRetry's write — not DB NOW(), avoiding timezone skew
      */
     @Select("SELECT * FROM delivery WHERE status = 2 AND next_retry_at <= #{now} "
             + "AND attempt < #{maxAttempt} LIMIT #{limit}")
@@ -41,26 +41,26 @@ public interface DeliveryMapper extends BaseMapper<DeliveryDO> {
                                       @Param("limit") int limit);
 
     /**
-     * 重试耗尽的死信候选(仍处 2-backoff,等判死)
+     * Dead-letter candidates with retries exhausted (still 2-backoff, awaiting death sentence)
      */
     @Select("SELECT * FROM delivery WHERE status = 2 AND attempt >= #{maxAttempt} LIMIT #{limit}")
     List<DeliveryDO> selectExhausted(@Param("maxAttempt") int maxAttempt, @Param("limit") int limit);
 
     /**
-     * CAS 认领 2→3 并把租约推到 leaseUntil;影响行数=1 才算本实例抢到(两实例并发只成一个)
+     * CAS claim 2→3 pushing the lease to leaseUntil; affected rows=1 means this instance won (concurrent instances, only one succeeds)
      */
     @Update("UPDATE delivery SET status = 3, next_retry_at = #{leaseUntil} WHERE id = #{id} AND status = 2")
     int claimSending(@Param("id") Long id, @Param("leaseUntil") LocalDateTime leaseUntil);
 
     /**
-     * CAS 判死 2→4(进死信)
+     * CAS pronounce death 2→4 (into dead letter)
      */
     @Update("UPDATE delivery SET status = 4 WHERE id = #{id} AND status = 2")
     int claimDead(@Param("id") Long id);
 
     /**
-     * 租约过期的 sending 行拨回 backoff——认领实例崩溃/发送失败的恢复路径
-     * (无条件下拨回是幂等的:拨回后各行再走 claimSending 重新抢)
+     * Flip expired-lease sending rows back to backoff — the recovery path for a crashed claimer / failed send
+     * (unconditional flip is idempotent: flipped rows go through claimSending again to re-race)
      */
     @Update("UPDATE delivery SET status = 2 WHERE status = 3 AND next_retry_at <= #{now}")
     int reclaimExpiredLeases(@Param("now") LocalDateTime now);
@@ -69,11 +69,11 @@ public interface DeliveryMapper extends BaseMapper<DeliveryDO> {
     int requeue(@Param("id") Long id, @Param("now") LocalDateTime now);
 
     /**
-     * 首发孤儿回收：pending(0) 且 updated_at 早于 cutoff 的行拨回 backoff(2)
-     * 覆盖 "insert成功但投递消息从未送达"的一切断裂（route半途异常/broker长挂/进程崩溃）
+     * First-delivery orphan reclaim: pending(0) rows whose updated_at is older than cutoff are flipped back to backoff(2)
+     * Covers every breakage where "insert succeeded but the delivery message never arrived" (route exception / broker long-down / process crash)
      *
-     * 正常首发秒级闭合，超时仍在pending(0)，可认为消息大概率没到，status改成backoff(2)后
-     * 由RetryScanner正常认领重发
+     * Normal first delivery closes in seconds; still pending(0) past the window = the message likely never arrived; flip status to backoff(2)
+     * and RetryScanner claims and resends normally
      */
     @Update("UPDATE delivery SET status = 2, next_retry_at = #{now} WHERE status = 0 AND updated_at <= #{cutoff}")
     int reclaimUnsent(@Param("now") LocalDateTime now, @Param("cutoff") LocalDateTime cutoff);

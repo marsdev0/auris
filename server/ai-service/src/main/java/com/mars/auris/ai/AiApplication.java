@@ -9,7 +9,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import java.util.TimeZone;
 
 /**
- * AI 服务入口：对接 Python engine（ASR/TTS/Agent）。
+ * AI service entry: integrates the Python engine (ASR/TTS/Agent).
  *
  * @author geyan
  */
@@ -18,8 +18,8 @@ import java.util.TimeZone;
 public class AiApplication {
 
     /**
-     * 全链路 UTC:与 MySQL 容器(UTC)对齐,LocalDateTime.now()/日志时间戳/超时兜底 cutoff
-     * 与 created_at 同一世界。展示时区转换是前端的职责(P3 §9 时区 bug 的修复决策)
+ * Full-chain UTC: aligned with the MySQL container (UTC); LocalDateTime.now()/log timestamps/timeout cutoff
+ * share the same world as created_at. Display timezone conversion is the frontend's job (P3 §9 timezone bug fix).
      */
     static {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"));

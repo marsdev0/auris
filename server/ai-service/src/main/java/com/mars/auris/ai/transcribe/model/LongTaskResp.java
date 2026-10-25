@@ -18,7 +18,7 @@ public class LongTaskResp {
     private String status;
 
     /**
-     * 单集/视频标题(URL 链路下载完成后有值,轮询期间随行可见)
+     * Episode/video title (populated after URL download completes, visible during polling)
      */
     private String title;
 
@@ -27,7 +27,7 @@ public class LongTaskResp {
     private Result result;
 
     /**
-     * 失败原因(failed 时有值)
+     * Failure reason (present on failure)
      */
     private String errorMsg;
 

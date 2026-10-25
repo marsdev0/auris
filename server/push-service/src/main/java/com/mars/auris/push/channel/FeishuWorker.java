@@ -9,8 +9,8 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 /**
- * 飞书渠道 worker:消费投递指令 → 限速 → 发交互卡片。
- * 失败(未配置/限流封禁/网络)抛异常由 handle 统一转 markRetry 退避。
+ * Feishu channel worker: consume delivery instructions → rate-limit → send interactive cards.
+ * Failures (unconfigured / rate-limit ban / network) throw; handle uniformly converts to markRetry backoff.
  *
  * @author geyan
  * @date 2026/10/2
@@ -27,7 +27,7 @@ public class FeishuWorker extends AbstractChannelWorker {
                    containerFactory = "manualAckFactory")
     public void onDelivery(String msg, Acknowledgment ack) {
         handle(msg, ack, (delivery, notice) -> {
-            // 阻塞限速:洪峰排队在 topic(lag 可观测),attempt 不被限速误伤
+            // Blocking rate-limit: flood peaks queue in the topic (lag observable); attempt is not punished by rate limiting
             try {
                 feishuRateLimiter.acquire();
             } catch (InterruptedException e) {

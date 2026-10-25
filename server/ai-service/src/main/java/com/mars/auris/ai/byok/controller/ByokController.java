@@ -47,7 +47,7 @@ public class ByokController {
     @PostMapping("/delete")
     public ApiResponse<Boolean> delete(@AuthenticationPrincipal UserPrincipal user,
                                        @RequestParam String domain) {
-        // 前端传的domain，需要校验，可能都不是llm、asr、tts，而是其他字符，此时应该在走到DB之前就拦截
+        // Frontend-supplied domain needs validation — could be anything, not just llm/asr/tts; intercept before it hits the DB
         return ApiResponse.ok(byokService.delete(user.userId(), ModelDomain.of(domain)));
     }
 

@@ -30,7 +30,7 @@ public class EventConsumer {
     public void onEvent(String message, Acknowledgment ack) {
         TranscribeEvent event = JsonUtils.fromJson(message, TranscribeEvent.class);
         if (event == null) {
-            // 解析错误，重试1万次都失败，此时应该结束
+            // Parse error — would fail even on 10k retries; time to stop
             log.error("事件不可解析: {}", message);
             ack.acknowledge();
             return;
@@ -43,7 +43,7 @@ public class EventConsumer {
                 return;
             }
             if (createResult.created()) {
-                // 新建通知才 +1;重复事件(uk_event 命中)不重复计数——计数幂等跟随落池幂等
+                // +1 only for newly created notifications; duplicate events (uk_event hit) don't double-count — counter idempotency follows pool-write idempotency
                 unreadCounter.incr(event.getUserId());
             }
             routerService.route(createResult.id(), event);

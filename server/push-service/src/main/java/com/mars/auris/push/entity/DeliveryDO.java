@@ -16,43 +16,43 @@ import java.time.LocalDateTime;
 public class DeliveryDO {
 
     /**
-     * Snowflake ID(即消息里的 delivery_id)
+     * Snowflake ID (the delivery_id inside messages)
      */
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /**
-     * 所属通知(notification.id)
+     * Owning notification (notification.id)
      */
     private Long notificationId;
 
     /**
-     * 投递渠道:inapp/email/feishu
+     * Delivery channel: inapp/email/feishu
      */
     private String channel;
 
     /**
-     * 0-pending占位 1-sent 2-backoff 3-sending认领中 4-failed_dq死信
+     * 0-pending placeholder 1-sent 2-backoff 3-sending claimed 4-failed_dq dead letter
      */
     private Integer status;
 
     /**
-     * 已尝试次数(退避 1s/2s/4s/8s/16s,>=5 判死)
+     * Attempts so far (backoff 1s/2s/4s/8s/16s; >=5 pronounced dead)
      */
     private Integer attempt;
 
     /**
-     * 下次重试时间(UTC;backoff 时非空,RetryScanner 扫描键;delivery 表即延迟队列)
+     * Next retry time (UTC; non-null in backoff, RetryScanner's scan key; the delivery table is the delay queue)
      */
     private LocalDateTime nextRetryAt;
 
     /**
-     * 最近一次失败原因(渠道返回,超长截断)
+     * Last failure reason (returned by the channel, truncated if long)
      */
     private String errorMsg;
 
     /**
-     * 状态迁移时间(UTC)
+     * Status transition time (UTC)
      */
     private LocalDateTime updatedAt;
 

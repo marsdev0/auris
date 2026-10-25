@@ -31,7 +31,7 @@ public class AsrTaskDTO {
     private String title;
 
     /**
-     * engine 任务失败原因(failed 时有值,回填 record.error_msg 的正主来源)
+     * Engine task failure reason (present on failure, the authoritative source for record.error_msg backfill)
      */
     private String error;
 

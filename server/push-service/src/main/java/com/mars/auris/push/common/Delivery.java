@@ -3,26 +3,26 @@ package com.mars.auris.push.common;
 import lombok.Getter;
 
 /**
- * 渠道投递状态机(delivery.status 列,0-4)。
+ * Channel delivery state machine (delivery.status column, 0-4).
  * <p>
- * 状态标记的不是"消息在 Kafka 管道里的位置"(DB 看不见管道内部——消息发没发、
- * 消没消费,表无从知晓),而是这一行此刻的账面事实:<b>归谁管、在等什么</b>。
+ * The status marks not "where the message is in the Kafka pipeline" (the DB cannot see inside the pipeline — whether a message was sent
+ * or consumed, the table has no way to know), but this row's current bookkeeping fact: <b>who owns it, what it's waiting for</b>.
  * <p>
- * 两条链路:首次(Router 落库占位 PENDING → 发渠道 topic → Worker 直接闭合 SENT/BACKOFF);
- * 重试(RetryScanner 到点认领 BACKOFF→SENDING → 重投 → Worker 闭合,失败再退避)。
+ * Two paths: first-time (Router inserts a PENDING placeholder → sends to channel topic → Worker closes SENT/BACKOFF directly);
+ * retry (RetryScanner claims BACKOFF→SENDING when due → redeliver → Worker closes; on failure, back off again).
  * <p>
- * 每个非终态都有巡检员兜底,不存在"无人看守"的状态:
+ * Every non-terminal state has a patrol guard; no state is left unattended:
  * <ul>
- *   <li>PENDING(0)  → reclaimUnsent:超 2 分钟仍在 0 = 首发消息从未送达,拨 2 重排</li>
- *   <li>BACKOFF(2)  → selectDueRetries:退避到点,认领重发</li>
- *   <li>SENDING(3)  → reclaimExpiredLeases:租约 60s 到期未回写 = 认领方已死,收尸拨 2</li>
- *   <li>FAILED_DQ(4)→ 人工 requeue(4→2,attempt 清零)</li>
+ *   <li>PENDING(0) → reclaimUnsent: still 0 after 2 minutes = first message never delivered, flip to 2 and reschedule</li>
+ *   <li>BACKOFF(2) → selectDueRetries: backoff due, claim and resend</li>
+ *   <li>SENDING(3) → reclaimExpiredLeases: 60s lease expired without write-back = claimer is dead, reap and flip to 2</li>
+ *   <li>FAILED_DQ(4)→ manual requeue (4→2, attempt reset to zero)</li>
  * </ul>
  * <p>
- * 白话对照:刚下单 / 约了改日再送 / 承运方已接单 / 签收 / 丢件立案。
+ * Plain-language mapping: just ordered / rescheduled for another day / carrier has accepted / delivered / lost-package claim.
  * <p>
- * code 是持久化语义:存量行、mapper SQL 字面量、DDL 注释全绑死数字,枚举重排即数据迁移
- * (同 {@link Channel} 的 bit 教训)——名字是给人看的可随时改,code 是给机器存的不能动。
+ * code is persistence semantics: existing rows, mapper SQL literals, and DDL comments are all bound to the numbers; reordering the enum is a data migration
+ * (same lesson as {@link Channel}'s bits) — names are for humans and can change anytime; codes are for machines and must not move.
  *
  * @author geyan
  * @date 2026/9/16
@@ -31,44 +31,44 @@ import lombok.Getter;
 public enum Delivery {
 
     /**
-     * 0-占位,无主,等首次投递。
+     * 0-placeholder, unowned, waiting for first delivery.
      * <p>
-     * 入:Router insert 时写入——目的是先占住 uk_notify_channel 幂等键,此刻 Kafka 消息还没发。
-     * 出:Worker 首次消费后 markSent/markRetry 直接闭合(首次链路无需 DB 认领,消费组天然独占);
-     * 若消息从未送达(route 半途断裂/broker 长挂/进程崩溃),2 分钟后 reclaimUnsent 拨到 2 重排。
+     * In: written on Router insert — the point is to occupy the uk_notify_channel idempotency key first; the Kafka message hasn't been sent yet.
+     * Out: closed by Worker's markSent/markRetry on first consume (the first-time path needs no DB claim; consumer groups are naturally exclusive);
+     * if the message never arrives (route broke midway / broker long-down / process crash), reclaimUnsent flips it to 2 after 2 minutes.
      */
     PENDING(0),
 
     /**
-     * 1-终态,渠道送达。Worker 渠道调用成功后 markSent(0/3→1),不可逆。
+     * 1-terminal, delivered by the channel. markSent (0/3→1) after the channel call succeeds; irreversible.
      */
     SENT(1),
 
     /**
-     * 2-退避等待,无主,等闹钟。
+     * 2-backoff wait, unowned, waiting for the alarm.
      * <p>
-     * 入:Worker 失败 markRetry 时写入(attempt+1,next_retry_at=退避后的时刻)。
-     * 此刻什么都没在发生——行在表里等时间到,它不是"正在重试",是"已排定重试"。
-     * next_retry_at 是闹钟,也是 selectDueRetries 的扫描键。
-     * 出:到点 RetryScanner 认领(2→3)重发;attempt>=5 由 selectExhausted 判死(2→4)。
-     * 原名 RETRYING,"等待"误用进行体与 SENDING 撞语义,更名(2026-10-02)。
+     * In: written on Worker's markRetry (attempt+1, next_retry_at=backoff time).
+     * Nothing is happening right now — the row waits in the table until time is up; it's not "retrying", it's "retry scheduled".
+     * next_retry_at is the alarm clock and also selectDueRetries' scan key.
+     * Out: when due, RetryScanner claims (2→3) and resends; attempt>=5 gets pronounced dead by selectExhausted (2→4).
+     * Formerly RETRYING; the progressive aspect collided with SENDING's semantics, renamed (2026-10-02).
      */
     BACKOFF(2),
 
     /**
-     * 3-在途,有主(认领实例持有租约),等结果。
+     * 3-in-flight, owned (the claiming instance holds the lease), waiting for the result.
      * <p>
-     * 入:RetryScanner claimSending 时 CAS 写入(2→3,租约 now+60s 顺手写进 next_retry_at——
-     * 这一列在 2 态是退避闹钟,在 3 态被改写为租约死线)。
-     * 覆盖窗口:认领起到 Worker 回写止,横跨"发 Kafka 前→消息在 topic 排队→Worker 正在调渠道"
-     * 全程——本质是所有权标记(分布式锁):多实例靠 CAS 抢,影响行数=1 者才许投递。
-     * 出:Worker markSent/markRetry 回写;租约到期未回写由 reclaimExpiredLeases 收尸(3→2)。
+     * In: CAS-written on RetryScanner's claimSending (2→3; lease now+60s conveniently lands in next_retry_at —
+     * this column is the backoff alarm in state 2, rewritten as the lease deadline in state 3).
+     * Coverage window: from claim to Worker write-back, spanning "before sending to Kafka → message queued in topic → Worker calling the channel"
+     * — essentially an ownership marker (a distributed lock): multi-instance races via CAS; only the one affecting rows=1 may deliver.
+     * Out: Worker's markSent/markRetry writes back; an expired lease without write-back gets reaped by reclaimExpiredLeases (3→2).
      */
     SENDING(3),
 
     /**
-     * 4-终态,死信。重试耗尽(attempt>=5)由 claimDead 判死(2→4)+广播 auris-notify-dlq 供告警。
-     * 行不删,留运维 POST /v1/notification/dlq/{id}/requeue 复活(4→2,attempt 清零,重新走 Scanner)。
+     * 4-terminal, dead letter. Retry exhaustion (attempt>=5) pronounced dead by claimDead (2→4) + auris-notify-dlq broadcast for alerting.
+     * The row is not deleted; ops POST /v1/notification/dlq/{id}/requeue revives it (4→2, attempt reset, re-enters the Scanner).
      */
     FAILED_DQ(4);
 

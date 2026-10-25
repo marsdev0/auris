@@ -5,12 +5,12 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Data;
 
 /**
- * 转发 engine /byok/validate 的请求体。
- * api_key 为解密后明文,仅内网一程,engine 侧零日志
+ * Request body forwarded to engine /byok/validate.
+ * api_key is the decrypted plaintext, inner-network hop only, zero logging on the engine side
  *
- * <p>engine 通道一律 snake_case(与 EngineValidateResp.latency_ms 同纪律):
- * 类级 @JsonNaming 统一翻译,baseUrl -> base_url / apiKey -> api_key,
- * 新增字段自动适配,无需逐字段 @JsonProperty。
+ * <p>Engine channel is snake_case throughout (same discipline as EngineValidateResp.latency_ms):
+ * class-level @JsonNaming translates uniformly, baseUrl -> base_url / apiKey -> api_key,
+ * new fields auto-adapt, no per-field @JsonProperty needed.
  *
  * @author geyan
  * @date 2026/10/11
@@ -19,21 +19,21 @@ import lombok.Data;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class EngineValidateReq {
 
-    /** 模型域:llm / tts / asr */
+    /** Model domain: llm / tts / asr */
     private String domain;
 
-    /** 供应商,决定 engine 构造哪个 provider */
+    /** Provider, determines which provider the engine constructs */
     private String provider;
 
-    /** 接入地址,null = 用 provider 官方默认端点 */
+    /** Endpoint URL, null = use the provider's official default */
     private String baseUrl;
 
-    /** 明文 key,免 key 配置(如 edge_tts)为 null */
+    /** Plaintext key, null for key-free configs (e.g. edge_tts) */
     private String apiKey;
 
-    /** 模型名,无模型概念的配置为 null */
+    /** Model name, null for configs with no model concept */
     private String model;
 
-    /** tts 音色,非 tts 域为 null */
+    /** TTS voice, null for non-tts domains */
     private String voice;
 }

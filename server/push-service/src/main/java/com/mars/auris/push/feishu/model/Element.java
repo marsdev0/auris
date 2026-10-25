@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * 卡片元素:markdown | hr | note(note 的子元素复用本类)
+ * Card element: markdown | hr | note (note's child elements reuse this class)
  *
  * @author geyan
  * @date 2026/10/2
@@ -22,17 +22,17 @@ import java.util.List;
 public class Element {
 
     /**
-     * 元素类型:markdown | hr | note
+     * Element type: markdown | hr | note
      */
     private String tag;
 
     /**
-     * markdown 文本(tag=markdown 时使用)
+     * Markdown text (used when tag=markdown)
      */
     private String content;
 
     /**
-     * note 子元素(tag=note 时使用)
+     * Note child element (used when tag=note)
      */
     private List<Element> elements;
 }

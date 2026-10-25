@@ -41,10 +41,10 @@ public class ByokService {
 
     private static final List<ModelDomain> list = List.of(ModelDomain.LLM, ModelDomain.ASR, ModelDomain.TTS);
 
-    /** 自建网关型供应商，必填 baseUrl */
+    /** Self-hosted gateway providers, baseUrl required */
     private static final String PROVIDER_OPENAI_COMPAT = "openai_compat";
 
-    // 默认，当前不涉及租户
+    // Default; no tenants for now
     private static final Long tenantId = 0L;
 
     @Autowired
@@ -75,13 +75,13 @@ public class ByokService {
     }
 
     public Boolean save(Long userId, SaveConfigReq req) {
-        // 1. 参数校验：openai_compat 必填 baseUrl。model/voice 无模型概念的场景允许为空
-        //    (edge_tts 无 model 等),必填性由前端按 provider 元数据控制,后端不维护特例表
+        // 1. Param validation: openai_compat requires baseUrl. model/voice allowed empty for model-less scenarios
+        //    (edge_tts has no model etc.); requiredness is controlled by the frontend per provider metadata, the backend keeps no special-case table
         if (PROVIDER_OPENAI_COMPAT.equals(req.getProvider()) && !StringUtils.hasText(req.getBaseUrl())) {
             throw new AurisException(CommonErrorCode.BAD_REQUEST, "openai_compat 必须填写 baseUrl");
         }
 
-        // 2. 组装实体;密文三件套仅换 key 时才有值
+        // 2. Assemble entity; the ciphertext trio is set only when the key changes
         UserModelConfigDO entity = new UserModelConfigDO();
         entity.setTenantId(tenantId);
         entity.setUserId(userId);
@@ -95,15 +95,15 @@ public class ByokService {
             entity.setApiKeyCipher(apiKeyCipher.encrypt(req.getApiKey()));
             entity.setKeyHint(maskTail4(req.getApiKey()));
         }
-        // key_version 列 NOT NULL,新行需给当前主密钥版本
+        // key_version column is NOT NULL; new rows need the current master key version
         entity.setKeyVersion(apiKeyCipher.currentVersion());
         entity.setStatus(ConfigStatus.UNVERIFIED.getCode());
         LocalDateTime now = LocalDateTime.now();
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
 
-        // 3. 直接插入;撞 uk_tenant_user_domain 说明该域已有配置,转编辑更新。
-        //    避免先查后写的 check-then-act 并发竞态
+        // 3. Insert directly; hitting uk_tenant_user_domain means the domain already has a config, switch to update.
+        //    Avoids the check-then-act concurrency race of query-then-insert
         try {
             modelConfigMapper.insert(entity);
             return true;
@@ -115,7 +115,7 @@ public class ByokService {
     private Boolean updateExisting(SaveConfigReq req, UserModelConfigDO entity, boolean keyChanged) {
         UserModelConfigDO old = modelConfigMapper.selectByTenantUserDomain(tenantId, entity.getUserId(), entity.getDomain());
         if (old == null) {
-            // 撞唯一键后却查不到旧记录,理论上仅在并发删除时出现
+            // Hit the unique key but the old record is gone — only possible under concurrent deletion
             throw new AurisException(CommonErrorCode.INTERNAL_ERROR, "保存配置冲突, 请重试");
         }
 
@@ -142,7 +142,7 @@ public class ByokService {
     }
 
     /**
-     * 取明文 key 尾 4 位作掩码提示(不足 4 位原样返回，免 key 配置为 null)
+     * Take the last 4 chars of the plaintext key as a mask hint (returned as-is if shorter, null for key-free configs)
      */
     private String maskTail4(String apiKey) {
         return apiKey.length() <= 4 ? apiKey : apiKey.substring(apiKey.length() - 4);
@@ -154,18 +154,18 @@ public class ByokService {
     }
 
     /**
-     * 1. 先查询(脏 domain 由 of() 拦截,未配置的域在转发前拦截)
-     * 2. 内存解密 + 调用 engine 验证(内网明文仅此一程,MVP 仅支持 llm 域)
-     * 3. 验证结果落库(status/last_checked_at/失败原因)
+     * 1. Query first (dirty domain intercepted by of(), unconfigured domains intercepted before forwarding)
+     * 2. Decrypt in memory + call engine to validate (plaintext exists only on this inner-network hop; MVP supports llm domain only)
+     * 3. Persist the validation result (status/last_checked_at/failure reason)
      */
     public Boolean validate(Long userId, ModelDomain domain) {
-        // 1. 按 uk 查该域已存配置
+        // 1. Query the stored config for this domain by uk
         UserModelConfigDO config = modelConfigMapper.selectByTenantUserDomain(tenantId, userId, domain.getValue());
         if (config == null) {
             throw new AurisException(CommonErrorCode.BAD_REQUEST, "该域尚未配置, 请先保存");
         }
 
-        // 2. 内存解密(免 key 配置为 null) + 组装转发体(明文仅内网一程) + 调用 engine 实测
+        // 2. Decrypt in memory (null for key-free) + assemble forwarding body (plaintext only on the inner hop) + call engine for a live check
         String apiKey = config.getApiKeyCipher() != null ? apiKeyCipher.decrypt(config.getApiKeyCipher()) : null;
         EngineValidateReq engineReq = new EngineValidateReq();
         engineReq.setDomain(domain.getValue());
@@ -181,17 +181,17 @@ public class ByokService {
                         .body(engineReq)
                         .retrieve()
                         .body(new ParameterizedTypeReference<>() {}),
-                // byok 域映射:engine 侧异常统一 502。校验成败由 code 表达,是预期业务分支不在这层拦截
+                // byok domain mapping: engine-side exceptions uniformly 502. Pass/fail is expressed by code, an expected business branch not intercepted at this layer
                 e -> new AurisException(AIErrorCode.ENGINE_ERROR));
 
-        // 3. 回写校验结果:status/last_checked_at/detail(成功拼延迟,失败给 engine 的 message)
+        // 3. Write back the result: status/last_checked_at/detail (success appends latency, failure carries engine's message)
         LambdaUpdateWrapper<UserModelConfigDO> uw = new LambdaUpdateWrapper<UserModelConfigDO>()
                 .eq(UserModelConfigDO::getId, config.getId())
                 .set(UserModelConfigDO::getStatus, engineResp.isSuccess()
                         ? ConfigStatus.VERIFIED.getCode() : ConfigStatus.FAILED.getCode())
                 .set(UserModelConfigDO::getLastCheckedAt, LocalDateTime.now());
         if (engineResp.isSuccess() && engineResp.getData() != null) {
-            // latency 不单独建列,拼进 detail("models listed, 87 available · 812ms")
+            // No separate latency column; appended into detail ("models listed, 87 available · 812ms")
             uw.set(UserModelConfigDO::getValidateDetail,
                     engineResp.getData().getDetail() + " · " + engineResp.getData().getLatencyMs() + "ms");
         } else {

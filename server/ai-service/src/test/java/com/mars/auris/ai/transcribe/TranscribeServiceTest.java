@@ -48,25 +48,25 @@ class TranscribeServiceTest {
     private EngineProperties engineProperties;
 
     /**
-     * 只替换跨进程边界(engine),替换的是容器里名为 engineSubmitRestClient 的真实 bean;
-     * 其余 bean(Service/Convert/Properties)全部走真实装配
+     * Replace only the cross-process boundary (engine); the replaced bean is the real container bean named engineSubmitRestClient;
+     * all other beans (Service/Convert/Properties) are real, fully assembled
      */
     @MockitoBean(name = "engineSubmitRestClient")
     private RestClient engineSubmit;
 
     /**
-     * 持久层整体 mock 掉:测试不碰真库(DataSource/mapper 也不需要真连接),
-     * 只验证 Service 编排层"调了什么",不验证"落库细节"(那是 RecordService 自己的单测)
+     * The persistence layer is entirely mocked: the test touches no real DB (DataSource/mapper need no real connection),
+     * verifying only "what the Service orchestration called", not "persistence details" (those have their own unit tests in RecordService)
      */
     @MockitoBean
     private TranscribeRecordService recordService;
 
-    // ========== 辅助方法:mock RestClient 的调用链(POST + multipart) ==========
+    // ========== Helpers: mock the RestClient call chain (POST + multipart) ==========
 
     /**
-     * mock engine 正常返回
+     * Mock a normal engine return
      *
-     * @return bodySpec,供调用方做 ArgumentCaptor 验证
+     * @return bodySpec, for ArgumentCaptor verification by the caller
      */
     private RestClient.RequestBodySpec mockEngineSuccess(AsrResultDTO response) {
         RestClient.RequestBodyUriSpec uriSpec = mock(RestClient.RequestBodyUriSpec.class);
@@ -75,17 +75,17 @@ class TranscribeServiceTest {
         when(engineSubmit.post()).thenReturn(uriSpec);
         when(uriSpec.uri(TranscribeConst.URL_ASR_TRANSCRIBE)).thenReturn(bodySpec);
         when(bodySpec.contentType(MediaType.MULTIPART_FORM_DATA)).thenReturn(bodySpec);
-        // body 有重载,body(Object) 必须显式 any(Object.class),否则 stub 落到别的重载上 → NPE
+        // body is overloaded; body(Object) needs an explicit any(Object.class), otherwise the stub lands on a different overload → NPE
         when(bodySpec.body(any(Object.class))).thenReturn(bodySpec);
         when(bodySpec.retrieve()).thenReturn(responseSpec);
-        // Service 用 body(ParameterizedTypeReference) 解 EngineResp 壳,stub 同一重载
+        // The Service unwraps the EngineResp shell with body(ParameterizedTypeReference); stub the same overload
         when(responseSpec.body(any(ParameterizedTypeReference.class)))
                 .thenReturn(new EngineResp<>(0, "success", response));
         return bodySpec;
     }
 
     /**
-     * mock engine 抛异常(模拟 engine 挂了 / 连接拒绝 / 超时)
+     * Mock the engine throwing (simulating engine down / connection refused / timeout)
      */
     private RestClient.RequestBodySpec mockEngineThrow(RuntimeException ex) {
         RestClient.RequestBodyUriSpec uriSpec = mock(RestClient.RequestBodyUriSpec.class);
@@ -99,7 +99,7 @@ class TranscribeServiceTest {
     }
 
     /**
-     * 从 mock 捕获的请求体里取某个 multipart part 的值
+     * Extract the value of a multipart part from the captured mock request body
      */
     private String capturedPart(RestClient.RequestBodySpec bodySpec, String name) {
         ArgumentCaptor<Object> bodyCaptor = ArgumentCaptor.forClass(Object.class);
@@ -109,47 +109,47 @@ class TranscribeServiceTest {
         return part == null ? null : String.valueOf(part.getBody());
     }
 
-    // ========== 场景 0:容器装配 + 配置真实绑定 ==========
+    // ========== Scenario 0: container assembly + real config binding ==========
 
     @Test
     void containerLoads_configBoundFromYaml() {
-        // 真容器起来,Service 成功注入;engine.provider 从 application.yaml 真实绑定
+        // Real container up, Service successfully injected; engine.provider really bound from application.yaml
         assertNotNull(transcribeService);
         assertEquals("qwen3-asr", engineProperties.getProvider());
     }
 
-    // ========== 场景 1:正常转写 ==========
+    // ========== Scenario 1: normal transcription ==========
 
     @Test
     void transcribeSync_success_returnsText() {
-        // 准备:mock engine 正常返回
+        // Setup: mock a normal engine return
         AsrResultDTO response = new AsrResultDTO();
         response.setText("你好世界");
         mockEngineSuccess(response);
 
-        // 执行
+        // Execute
         TranscribeResp result = transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper");
 
-        // 验证:engine 的全文透传给了前端模型
+        // Verify: the engine's full text passes through to the frontend model
         assertEquals("你好世界", result.getText());
-        // 验证:成功后以当前 userId 落库(P3 写入点⑤,历史记录)
+        // Verify: on success, persisted with the current userId (P3 write point ⑤, history)
         verify(recordService).saveTranscribeSyncResult(eq(USER_ID), any(EngineResp.class));
     }
 
-    // ========== 场景 2:provider 未传,兜底到配置默认值 ==========
+    // ========== Scenario 2: provider not passed, falls back to the configured default ==========
 
     @Test
     void transcribeSync_providerNull_fallsBackToConfig() {
         RestClient.RequestBodySpec bodySpec = mockEngineSuccess(new AsrResultDTO());
 
-        // 执行(provider 传 null)
+        // Execute (provider is null)
         transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), null);
 
-        // 验证:发出去的 multipart 里 provider part 是配置的默认值
+        // Verify: the provider part in the outgoing multipart is the configured default
         assertEquals("qwen3-asr", capturedPart(bodySpec, "provider"));
     }
 
-    // ========== 场景 3:provider 显式传入,原样转发 ==========
+    // ========== Scenario 3: provider passed explicitly, forwarded as-is ==========
 
     @Test
     void transcribeSync_providerSpecified_forwarded() {
@@ -160,11 +160,11 @@ class TranscribeServiceTest {
         assertEquals("whisper", capturedPart(bodySpec, "provider"));
     }
 
-    // ========== 场景 4:engine 返回空 body,抛 ENGINE_ERROR ==========
+    // ========== Scenario 4: engine returns empty body → throws ENGINE_ERROR ==========
 
     @Test
     void transcribeSync_emptyBody_throwsEngineError() {
-        // 准备:engine 返回 200 但 body 反序列化为 null
+        // Setup: engine returns 200 but the body deserializes to null
         RestClient.RequestBodyUriSpec uriSpec = mock(RestClient.RequestBodyUriSpec.class);
         RestClient.RequestBodySpec bodySpec = mock(RestClient.RequestBodySpec.class);
         RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
@@ -173,17 +173,17 @@ class TranscribeServiceTest {
         when(bodySpec.contentType(MediaType.MULTIPART_FORM_DATA)).thenReturn(bodySpec);
         when(bodySpec.body(any(Object.class))).thenReturn(bodySpec);
         when(bodySpec.retrieve()).thenReturn(responseSpec);
-        // 同一重载:body(ParameterizedTypeReference) 返回 null
+        // Same overload: body(ParameterizedTypeReference) returns null
         when(responseSpec.body(any(ParameterizedTypeReference.class))).thenReturn(null);
 
-        // 执行 + 验证
+        // Execute + verify
         AurisException ex = assertThrows(AurisException.class,
                 () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(502101, ex.getCode());
     }
 
-    // ========== 场景 5:engine 挂了(连接拒绝)→ 503 ENGINE_UNAVAILABLE ==========
-    // P1 方案 §3.4 异常映射:ResourceAccessException 不再原样抛出
+    // ========== Scenario 5: engine down (connection refused) → 503 ENGINE_UNAVAILABLE ==========
+    // P1 plan §3.4 exception mapping: ResourceAccessException is no longer rethrown as-is
 
     @Test
     void transcribeSync_engineDown_throwsEngineUnavailable() {
@@ -195,7 +195,7 @@ class TranscribeServiceTest {
         assertEquals(503, ex.getHttpStatus());
     }
 
-    // ========== 场景 6:engine 返回 404 → 404 TASK_NOT_FOUND(msg 透传 engine 原文) ==========
+    // ========== Scenario 6: engine returns 404 → 404 TASK_NOT_FOUND (msg passes through engine's text) ==========
 
     @Test
     void transcribeSync_engine404_throwsTaskNotFound() {
@@ -210,7 +210,7 @@ class TranscribeServiceTest {
         assertEquals("任务不存在或已过期", ex.getMsg());
     }
 
-    // ========== 场景 7:engine 返回 400 → 400 AUDIO_INVALID(msg 透传) ==========
+    // ========== Scenario 7: engine returns 400 → 400 AUDIO_INVALID (msg passes through) ==========
 
     @Test
     void transcribeSync_engine400_throwsAudioInvalid() {
@@ -225,7 +225,7 @@ class TranscribeServiceTest {
         assertEquals("音频内容为空", ex.getMsg());
     }
 
-    // ========== 场景 8:engine 返回 500 → 502 ENGINE_ERROR(不透传原文) ==========
+    // ========== Scenario 8: engine returns 500 → 502 ENGINE_ERROR (original text not passed through) ==========
 
     @Test
     void transcribeSync_engine500_throwsEngineError_noLeak() {
@@ -237,7 +237,7 @@ class TranscribeServiceTest {
         AurisException ex = assertThrows(AurisException.class,
                 () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(502_101, ex.getCode());
-        // 关键:5xx 不透传 engine 原文(可能含内部路径),只给统一文案
+        // Key point: 5xx does not pass through the engine's original text (may contain internal paths); only the unified message
         assertEquals("转写引擎内部错误", ex.getMsg());
     }
 }

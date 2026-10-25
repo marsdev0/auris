@@ -20,22 +20,22 @@ public class UserNoticePreferenceDO {
     private Long id;
 
     /**
-     * 用户(隔离键)
+     * User (isolation key)
      */
     private Long userId;
 
     /**
-     * 通知类型(与 notice.type 同枚举;广播类可配 *)
+     * Notification type (same enum as notice.type; broadcast types allow *)
      */
     private String type;
 
     /**
-     * 渠道位掩码:bit0=inapp bit1=email bit2=feishu,关=0
+     * Channel bitmask: bit0=inapp bit1=email bit2=feishu, 0=off
      */
     private Integer channelMask;
 
     /**
-     * 0-该类型整体退订(opt-out) 1-开启
+     * 0-unsubscribed from this type entirely (opt-out) 1-enabled
      */
     private Integer enabled;
 

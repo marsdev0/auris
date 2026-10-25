@@ -21,11 +21,11 @@ public class KafkaConfig {
     }
 
     /**
-     * 手动 ack 的监听器容器工厂(P5 §1.5),供带 Acknowledgment 参数的 @KafkaListener 挂载
-     * (EventConsumer 与各 ChannelWorker)。
+     * Manual-ack listener container factory (P5 §1.5), for @KafkaListeners that take an Acknowledgment parameter
+     * (EventConsumer and the ChannelWorkers).
      * <p>
-     * AckMode = MANUAL_IMMEDIATE:offset 提交时机由 listener 的 ack.acknowledge() 决定——
-     * 处理成功才提交;失败不提交,消息由 Kafka 重新投递(at-least-once 的消费侧根基)。
+     * AckMode = MANUAL_IMMEDIATE: offset commit timing is decided by the listener's ack.acknowledge() —
+     * commit only on success; on failure no commit, Kafka redelivers (the consumption-side foundation of at-least-once).
      */
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> manualAckFactory(

@@ -30,7 +30,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 注册查重/登录比对/防枚举(用户不存在与密码错误同码)/封禁拦截
+ * Registration dedup / login comparison / anti-enumeration (user-not-found and wrong-password share the same code) / ban interception
  *
  * @author geyan
  * @date 2026/9/7
@@ -45,7 +45,7 @@ class AuthServiceTest {
     @Mock
     private RefreshTokenStore refreshTokenStore;
 
-    /** 强度降到4, BCrypt快两个数量级, 单测够用且不影响matches语义 */
+    /** Strength lowered to 4; BCrypt is two orders of magnitude faster — enough for unit tests, doesn't affect matches() semantics */
     @Spy
     private PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
 

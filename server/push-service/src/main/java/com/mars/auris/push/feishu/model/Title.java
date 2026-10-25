@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 卡片标题(tag 固定 plain_text)
+ * Card title (tag is fixed plain_text)
  *
  * @author geyan
  * @date 2026/10/2

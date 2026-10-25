@@ -14,9 +14,9 @@ import org.springframework.context.annotation.Configuration;
 public class MybatisPlusConfig {
 
     /**
-     * 分页拦截器:拦截 selectPage,把分页参数改写成物理 LIMIT + 自动发 COUNT
-     * 没有它 selectPage 是查全表再内存截断的假分页(P3 §5)
-     * @geyan  仔细研究下
+     * Pagination interceptor: intercepts selectPage, rewrites pagination into physical LIMIT + automatic COUNT
+     * Without it selectPage is fake pagination — full-table query then in-memory slicing (P3 §5)
+     * @geyan  study this carefully
      */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {

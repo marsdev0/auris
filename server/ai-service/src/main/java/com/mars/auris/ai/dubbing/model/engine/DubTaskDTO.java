@@ -5,16 +5,16 @@ package com.mars.auris.ai.dubbing.model.engine;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
-/** engine GET /v1/dubbing/task/{id} 的 data 投影(to_public 契约,snake_case 映射)。 */
+/** Projection of engine GET /v1/dubbing/task/{id} data (to_public contract, snake_case mapping). */
 @Data
 public class DubTaskDTO {
-    /** 0-init 1-running 2-completed 3-failed(与 DO/SQL/engine DubStatus 同口径) */
+    /** 0-init 1-running 2-completed 3-failed (same vocabulary as DO/SQL/engine DubStatus) */
     private Integer status;
     @JsonProperty("stage_index")
     private Integer stageIndex;
     @JsonProperty("stage_total")
     private Integer stageTotal;
-    /** audio|video(engine 是 kind 判定的唯一事实源,轮询校准) */
+    /** audio|video (engine is the single source of truth for kind, calibrated on poll) */
     private String kind;
     private String title;
     private String error;

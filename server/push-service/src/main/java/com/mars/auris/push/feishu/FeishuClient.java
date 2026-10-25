@@ -9,10 +9,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
 /**
- * 飞书群机器人 webhook 客户端(单群形态,URL 来自配置)。
+ * Feishu group-bot webhook client (single-group setup, URL from config).
  * <p>
- * 失败语义:未配置/4xx/5xx/网络异常一律抛出——由 AbstractChannelWorker 统一 catch
- * 转 markRetry 退避,attempt 耗尽进 DLQ。"地址配错→退避→死信"正是 §7 的演练路径。
+ * Failure semantics: unconfigured/4xx/5xx/network exceptions all throw — AbstractChannelWorker uniformly catches
+ * and converts to markRetry backoff; attempt exhaustion goes to DLQ. "Wrong URL → backoff → dead letter" is exactly §7's drill path.
  *
  * @author geyan
  * @date 2026/10/2
@@ -24,7 +24,7 @@ public class FeishuClient {
     private final RestClient restClient;
 
     /**
-     * 留空 = 渠道未开通:发送即抛,走退避/死信(可控的演练路径)
+     * Empty = channel not configured: send throws immediately, goes to backoff/DLQ (a controllable drill path)
      */
     private final String webhookUrl;
 
@@ -35,7 +35,7 @@ public class FeishuClient {
     }
 
     /**
-     * 发交互卡片,成功返回 true;任何失败抛异常(调用方不 catch,交给 handle 统一转退避)
+     * Send an interactive card, returns true on success; any failure throws (callers don't catch; handle converts to backoff uniformly)
      */
     public boolean sendCard(Card card) {
         if (!StringUtils.hasText(webhookUrl)) {

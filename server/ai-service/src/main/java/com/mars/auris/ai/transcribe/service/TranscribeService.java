@@ -71,7 +71,7 @@ public class TranscribeService {
     private TranscribeEventProducer eventProducer;
 
     /**
-     * 同步返回
+     * Synchronous return
      */
     public TranscribeResp transcribeSync(Long userId, byte[] audio, String provider) {
         EngineResp<AsrResultDTO> result = callEngine(() -> engineSubmit.post()
@@ -107,13 +107,13 @@ public class TranscribeService {
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {
                 }));
-        // URL 链路 title 由下载完成后回填,插入时为空
+        // URL-path title is backfilled after download completes; empty at insert time
         Long recordId = recordService.createTask(userId, result.getData(), TranscribeConst.SOURCE_URL, null);
         return new SubmitTaskResp(String.valueOf(recordId));
     }
 
     /**
-     * 上传文件的展示名:originalFilename 的 basename,截断 256(原始值可能带路径/超长/为 null)
+     * Display name for uploaded files: basename of originalFilename, truncated to 256 (raw value may carry a path / be overlong / be null)
      */
     private String basename(String originalFilename) {
         if (originalFilename == null || originalFilename.isBlank()) {
@@ -125,14 +125,14 @@ public class TranscribeService {
 
 
     public LongTaskResp getRecord(Long userId, Long recordId) {
-        // 1. 先查DB，如果是终态，则直接返回，同时比较userId; 如果是非终态，继续查engine
+        // 1. Check DB first: terminal state → return directly (also verify userId); non-terminal → continue to engine
         TranscribeRecordDO record = recordService.findByUserIdAndRecordId(userId, recordId);
         if (record == null) {
-            // 查不到/不属于当前用户/已删除,同码同文案,不泄露存在性(P3 §2.5)
+            // Not found / not the current user's / deleted — same code, same message, no existence leak (P3 §2.5)
             throw new AurisException(AIErrorCode.RECORD_NOT_FOUND);
         }
         if (record.getStatus() != 0) {
-            // 终态(completed/failed)直接回源 DB,不再打 engine
+            // Terminal state (completed/failed) returns from DB directly, no engine call
             return convert.to(record);
         }
 
@@ -154,23 +154,23 @@ public class TranscribeService {
             recordService.complete(userId, record.getId(), result.getData());
             eventProducer.publishTranscribeTerminal(userId, record.getId(), result.getData().getTitle(), "completed");
         } else if (TranscribeConst.ENGINE_STATUS_FAILED.equals(result.getData().getStatus())) {
-            // 失败原因的正主来源是任务详情的 error 字段(EngineResp.message 轮询成功时恒空)
+            // The authoritative failure source is the task detail's error field (EngineResp.message is always empty on successful polls)
             recordService.fail(userId, record.getId(), result.getData().getError(), result.getData().getTitle());
             eventProducer.publishTranscribeTerminal(userId, record.getId(), result.getData().getTitle(), "failed");
         }
 
         LongTaskResp resp = convert.to(result.getData());
         resp.setRecordId(String.valueOf(recordId));
-        // error → errorMsg 字段不同名,MapStruct 不映射,轮询发现失败的那次响应也要能看到原因
+        // error → errorMsg field-name mismatch, MapStruct doesn't map it; the poll that discovers failure must also carry the reason
         resp.setErrorMsg(result.getData().getError());
         return resp;
     }
 
 
     public void deleteRecord(Long userId, Long recordId) {
-        // 先查再删，没有意义
-        // 如果不满足条件或不存在，不会删除
-        // 而且加了查询，反而会出现并发问题，TOCTOU
+        // Query-then-delete is pointless:
+        // if the condition isn't met or the row doesn't exist, nothing is deleted
+        // and adding a query introduces a concurrency problem, TOCTOU
 //        TranscribeRecordDO item = recordService.findByUserIdAndRecordId(userId, recordId);
 //        if (item == null) {
 //            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
@@ -192,15 +192,15 @@ public class TranscribeService {
     }
 
 
-    // ==================== 内部逻辑 ===================================
+    // ==================== Internal logic ===================================
 
     /**
-     * engine 调用统一出口:HTTP 层委托 EngineClient 骨架,本域保留 code 检查(非 0 = 转写失败 = 请求失败)
-     * 与状态码映射表(P1 方案 §3.4):
-     *   400 空内容/解码失败 → AUDIO_INVALID(msg 透传 engine 原文)
-     *   404 任务不存在/过期 → TASK_NOT_FOUND;413 → FILE_TOO_LARGE
-     *   5xx → ENGINE_ERROR(不透传原文,可能含内部路径,日志留 detail)
-     *   连不上/超时 → ENGINE_UNAVAILABLE
+     * Unified engine call exit: HTTP layer delegates to the EngineClient skeleton; this domain keeps the code check (non-0 = transcription failed = request failed)
+     * Status-code mapping table (P1 plan §3.4):
+     *   400 empty content/decode failure → AUDIO_INVALID (msg passes through the engine's original text)
+     *   404 task not found/expired → TASK_NOT_FOUND; 413 → FILE_TOO_LARGE
+     *   5xx → ENGINE_ERROR (original text not passed through — may contain internal paths; detail kept in logs)
+     *   unreachable/timeout → ENGINE_UNAVAILABLE
      */
     private <T> EngineResp<T> callEngine(Supplier<EngineResp<T>> call) {
         EngineResp<T> result = engineClient.execute(call, this::toAurisException);
@@ -211,7 +211,7 @@ public class TranscribeService {
     }
 
     /**
-     * engine 的 HTTP 状态码 → AurisException(engine 错误文案在 detail 里,按需透传)
+     * Engine HTTP status code → AurisException (engine error text in detail, pass through as needed)
      */
     private AurisException toAurisException(RestClientResponseException e) {
         String detail = engineClient.extractDetail(e);

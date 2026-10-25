@@ -72,8 +72,8 @@ public class TranscribeController {
     @GetMapping("/records/{id}")
     public ApiResponse<LongTaskResp> getRecord(@AuthenticationPrincipal UserPrincipal user,
                                                @PathVariable Long id) {
-        // 异常映射在 Service 层完成,这里不 catch——
-        // AurisException 会被 GlobalExceptionHandler 按映射后的状态码渲染
+        // Exception mapping happens in the Service layer; no catch here —
+        // AurisException gets rendered by GlobalExceptionHandler at the mapped status code
         return ApiResponse.ok(transcribeService.getRecord(user.userId(), id));
     }
 

@@ -5,8 +5,8 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 记录列表项。不含 text——列表不查大字段,不触发溢出页 IO
- * 也不含 errorMsg,失败原因走详情接口
+ * Record list item. No text — list queries skip big fields, no overflow-page IO
+ * No errorMsg either; failure reasons go through the detail endpoint
  *
  * @author geyan
  * @date 2026/9/12
@@ -15,27 +15,27 @@ import java.time.LocalDateTime;
 public class RecordItemResp {
 
     /**
-     * recordId,字符串承载防 JS 精度丢失(与 SubmitTaskResp/LongTaskResp 对齐)
+     * recordId, carried as string to prevent JS precision loss (aligned with SubmitTaskResp/LongTaskResp)
      */
     private String recordId;
 
     /**
-     * 文件名
+     * Filename
      */
     private String title;
 
     /**
-     * transcribing/completed/failed,与轮询响应的状态词对齐
+     * transcribing/completed/failed, aligned with polling response status words
      */
     private String status;
 
     /**
-     * 音频时长(毫秒),completed 时有值
+     * Audio duration (ms), present on completed
      */
     private Integer durationMs;
 
     /**
-     * 提交时间
+     * Submitted at
      */
     private LocalDateTime createdAt;
 }

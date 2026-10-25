@@ -16,43 +16,43 @@ import java.time.LocalDateTime;
 public class TranscribeRecordDO {
 
     /**
-     * Snowflake ID(对外 recordId)
+     * Snowflake ID (external recordId)
      */
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /**
-     * 提交用户,数据隔离键
+     * Submitting user, data isolation key
      */
     private Long userId;
 
     /**
-     * engine 任务ID(uuid hex),追溯用
+     * Engine task ID (uuid hex), for tracing
      */
     private String engineTaskId;
 
     /**
-     * 0-异步 or 1-同步
+     * 0-async or 1-sync
      */
     private Integer source;
 
     /**
-     * 文件名(提交时取 originalFilename 的 basename)
+     * Filename (basename of originalFilename at submission)
      */
     private String title;
 
     /**
-     * 时长(完成时从 segments max(end_ms) 推导)
+     * Duration (derived from segments max(end_ms) on completion)
      */
     private Integer durationMs;
 
     /**
-     * 转写全文(完成时填)
+     * Full transcription text (filled on completion)
      */
     private String text;
 
     /**
-     * 段级明细(带时间戳,P6 章节大纲直接可用)
+     * Segment details (with timestamps, directly usable for P6 chapter outlines)
      */
     private String segmentsJson;
 
@@ -62,17 +62,17 @@ public class TranscribeRecordDO {
     private Integer status;
 
     /**
-     * 失败原因(failed 时填,超长截断)
+     * Failure reason (filled on failure, truncated if long)
      */
     private String errorMsg;
 
     /**
-     * 创建时间
+     * Created at
      */
     private LocalDateTime createdAt;
 
     /**
-     * 更新时间
+     * Updated at
      */
     private LocalDateTime updatedAt;
 

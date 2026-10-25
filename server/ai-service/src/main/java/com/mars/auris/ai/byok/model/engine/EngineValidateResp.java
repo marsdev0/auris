@@ -4,9 +4,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 /**
- * engine /byok/validate 的响应 data 部分。
- * 成败由外层 EngineResp.code 表达(0=校验通过,非 0=校验失败,失败原因在 EngineResp.message),
- * 本体只承载成功时的附加信息
+ * The data part of engine /byok/validate response.
+ * Success/failure is expressed by the outer EngineResp.code (0=passed, non-0=failed, reason in EngineResp.message),
+ * this body carries only the extra info on success
  *
  * @author geyan
  * @date 2026/10/11
@@ -14,10 +14,10 @@ import lombok.Data;
 @Data
 public class EngineValidateResp {
 
-    /** 实测耗时 ms */
+    /** Measured latency in ms */
     @JsonProperty("latency_ms")
     private Integer latencyMs;
 
-    /** 成功摘要(如 models listed, 87 available) */
+    /** Success summary (e.g. models listed, 87 available) */
     private String detail;
 }

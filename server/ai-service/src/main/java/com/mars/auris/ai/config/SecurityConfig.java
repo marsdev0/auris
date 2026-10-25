@@ -30,7 +30,7 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)           // 前后端分离，不需要 CSRF
                 .sessionManagement(sm -> sm.sessionCreationPolicy(STATELESS))   // 无状态，不用 Session
                 .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
-                // 账号密码认证之后执行jwtAuthFilter
+                // jwtAuthFilter runs after username/password authentication
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new RestAuthenticationEntryPoint()));
 

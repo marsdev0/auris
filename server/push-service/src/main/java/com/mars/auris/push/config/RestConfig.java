@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
 /**
- * 渠道出站 HTTP 客户端(飞书 webhook;Email SMTP 不走此通道)
+ * Channel-outbound HTTP client (Feishu webhook; Email SMTP does not go through this channel)
  *
  * @author geyan
  * @date 2026/10/2

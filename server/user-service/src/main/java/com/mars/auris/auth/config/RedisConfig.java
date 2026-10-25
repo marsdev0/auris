@@ -46,7 +46,7 @@ public class RedisConfig {
 
         template.setHashKeySerializer(new StringRedisSerializer());
         template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
-        // 如果不是spring容器自动管理，而是通过new的方式创建的话，必须手动调用这个方法，否则额配置不会生效
+        // If not auto-managed by the Spring container but created via new(), you must call this method manually, or the config won't take effect
         template.afterPropertiesSet();
         return template;
     }

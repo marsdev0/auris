@@ -15,16 +15,16 @@ import org.apache.ibatis.annotations.Update;
 public interface NoticeMapper extends BaseMapper<NoticeDO> {
 
     /**
-     * 单条已读:条件带 user_id(IDOR 防护——别人猜 id 也改不到你的通知)+ read_flag=0
-     * (重复点已读是 no-op,影响行数=0,计数器不会重复 DECR)
+     * Mark single read: the WHERE carries user_id (IDOR protection — others guessing your id can't modify your notification) + read_flag=0
+     * (repeated mark-read is a no-op, affected rows=0, the counter won't double-DECR)
      *
-     * @return 影响行数,1=本次从未读变已读
+     * @return affected rows, 1 = unread→read transition
      */
     @Update("UPDATE notice SET read_flag = 1 WHERE id = #{id} AND user_id = #{userId} AND read_flag = 0")
     int markRead(@Param("id") Long id, @Param("userId") Long userId);
 
     /**
-     * 全部已读:命中条数由调用方用来触发计数器 reset
+     * Mark all read: hit count is used by the caller to trigger a counter reset
      */
     @Update("UPDATE notice SET read_flag = 1 WHERE user_id = #{userId} AND read_flag = 0")
     int markAllRead(@Param("userId") Long userId);

@@ -40,7 +40,7 @@ public class AuthService {
     private RefreshTokenStore refreshTokenStore;
 
     /**
-     * 不能先查询，再插入，有并发问题
+     * Cannot query-then-insert — that has a concurrency problem
      */
     public void register(RegisterReq req) {
         UserDO userDO = createUser(req);
@@ -61,11 +61,11 @@ public class AuthService {
     }
 
     /**
-     * 登录
-     * 1. 按 username 查用户
-     * 2. 校验密码
-     * 3. 生成 accessToken + refreshToken
-     * 4. 保存 refreshToken(供后续轮换/撤销)
+     * Login:
+     * 1. look up the user by username
+     * 2. verify the password
+     * 3. generate accessToken + refreshToken
+     * 4. store the refreshToken (for later rotation/revocation)
      */
     public LoginResp login(LoginReq req) {
         LambdaQueryWrapper<UserDO> query = new LambdaQueryWrapper<>();
@@ -101,19 +101,19 @@ public class AuthService {
 
     public void logout(Long userId) {
         refreshTokenStore.delete(userId);
-        // TODO 优化
-        // 用户 logout 后，access token 在过期前依然能通过 JwtAuthFilter 的校验。目前是 JWT 无状态的常见做法（没法主动让一个 JWT 失效），但如果你对安全性要求高，可以考虑：
+        // TODO optimize
+        // After logout, the access token still passes JwtAuthFilter until expiry. This is the common stateless-JWT trade-off (no way to actively invalidate a JWT); if security demands more:
         //
-        //  - 轻量方案：在 Redis 维护一个黑名单（logout 时把 access token 的剩余 TTL 存进去），JwtAuthFilter 中加一次黑名单检查
-        //  - 当前方案够用吗：如果 access token 有效期很短（比如 15-30 分钟），风险很低，可以暂不处理
+        //  - lightweight: maintain a Redis blacklist (store the access token's remaining TTL at logout); JwtAuthFilter adds a blacklist check
+        //  - is the current setup enough: with a short access-token TTL (e.g. 15-30 min), the risk is low and can be deferred
     }
 
     /**
-     * 刷新 token
-     * 1. 解析 refreshToken，拿到userId
-     * 2. 从缓存中取出，对比
-     * 3. 签发新的 accessToken + refreshToken
-     * 4. 缓存新的 refreshToken
+     * Refresh token:
+     * 1. parse the refreshToken, extract userId
+     * 2. fetch from cache, compare
+     * 3. issue a new accessToken + refreshToken
+     * 4. cache the new refreshToken
      */
     public TokenResp refresh(RefreshTokenReq req) {
         Claims claims = jwtService.parseToken(req.getRefreshToken(), true);

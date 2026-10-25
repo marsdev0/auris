@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * 飞书交互卡片
+ * Feishu interactive card
  *
  * @author geyan
  * @date 2026/10/2

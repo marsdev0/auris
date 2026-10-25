@@ -3,13 +3,13 @@ package com.mars.auris.push.feishu;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 单机阻塞式令牌桶(飞书限速 90/min,P5 §2.7 渠道出口阀)。
+ * Single-machine blocking token bucket (Feishu rate limit 90/min, P5 §2.7 channel-outlet valve).
  * <p>
- * 选阻塞而非拒绝:拿不到令牌就等——洪峰排队在 Kafka topic(lag 可观测),不误伤 attempt
- * (tryAcquire 失败若走 markRetry,洪峰会把 attempt 快速烧到 5 误判死)。
- * 单机实现即够:Stage 1 单实例;多实例时各持一份桶,总速率 ≈ N×rate,届时按实例数配分。
+ * Blocking over rejecting: no token → wait — flood peaks queue in the Kafka topic (lag observable); attempt is not punished
+ * (if tryAcquire failure went to markRetry, a flood would burn attempt to 5 quickly and falsely pronounce death).
+ * Single-machine implementation suffices: Stage 1 is single-instance; multi-instance gives each a bucket, total rate ≈ N×rate, split the config by instance count then.
  * <p>
- * nanoTime 单调钟(不受系统改时间影响);synchronized + wait 分段等待防时钟漂移。
+ * nanoTime monotonic clock (immune to system clock changes); synchronized + wait with segmented waits guards against clock drift.
  *
  * @author geyan
  * @date 2026/10/2
@@ -17,11 +17,11 @@ import java.util.concurrent.TimeUnit;
 public class TokenBucket {
 
     /**
-     * 桶容量(允许的突发量)
+     * Bucket capacity (allowed burst size)
      */
     private final double capacity;
     /**
-     * 每纳秒补充的令牌数
+     * Tokens replenished per nanosecond
      */
     private final double tokensPerNano;
     private double tokens;
@@ -35,7 +35,7 @@ public class TokenBucket {
     }
 
     /**
-     * 阻塞直到取到一枚令牌;被中断抛 InterruptedException(交给 handle 转 false 语义)
+     * Block until a token is acquired; interruption throws InterruptedException (handle converts to false semantics)
      */
     public synchronized void acquire() throws InterruptedException {
         while (true) {

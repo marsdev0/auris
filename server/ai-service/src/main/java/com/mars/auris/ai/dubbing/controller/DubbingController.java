@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-/** 配音任务 API(D6):发起/列表/状态/删除/asset 流式代理。 */
+/** Dubbing task API (D6): submit/list/status/delete/asset streaming proxy. */
 @RestController
 @RequestMapping("/v1/dubbing")
 public class DubbingController {
@@ -55,7 +55,7 @@ public class DubbingController {
         return ApiResponse.ok();
     }
 
-    /** 产物流式代理:不走 ApiResponse 包装,响应体就是产物字节(kind=audio|video|srt)。 */
+    /** Artifact streaming proxy: no ApiResponse wrapping, the response body is the artifact bytes (kind=audio|video|srt). */
     @GetMapping("/{id}/asset")
     public void asset(@AuthenticationPrincipal UserPrincipal user,
                       @PathVariable Long id,

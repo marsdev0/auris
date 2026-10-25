@@ -58,8 +58,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 请求体不可读:JSON 格式错/字段类型错/枚举脏值(@JsonCreator 工厂抛的 IAE 被 Jackson 包装)。
-     * 本质是客户端错误,归 400 而非 500
+     * Unreadable request body: bad JSON / wrong field type / dirty enum value (IAE from a @JsonCreator factory wrapped by Jackson).
+     * Fundamentally a client error, belongs in 400 not 500
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {

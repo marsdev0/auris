@@ -48,7 +48,7 @@ public class TranscribeRecordService {
             List<AsrSegment> segments = result.getData().getSegments();
             if (segments != null && !segments.isEmpty()) {
                 item.setSegmentsJson(JsonUtils.toJson(segments));
-                // segment 起止单位为秒(float),duration 取 max(end) 转 ms(P3 §3)
+                // Segment start/end are in seconds (float); duration takes max(end) converted to ms (P3 §3)
                 item.setDurationMs((int) Math.round(segments.stream()
                         .mapToDouble(AsrSegment::getEnd).max().orElse(0) * 1000));
             }
@@ -67,14 +67,14 @@ public class TranscribeRecordService {
         item.setStatus(0);
 
         try {
-            // 不需要先查询再插入，有并发问题，直接插入即可
+            // No need to query-then-insert — that has a concurrency problem; just insert directly
             recordMapper.insert(item);
         } catch (DuplicateKeyException e) {
-            // 不能直接返回 item.getId():插入未成功,那是未落库的假 id;查回已存在记录,续用其 recordId
+            // Cannot return item.getId(): the insert didn't succeed, that's an unpersisted fake id; query back the existing record, reuse its recordId
             log.error("engine_task_id 重复, userId: {}, taskId: {}", userId, engineTaskId);
             TranscribeRecordDO recordDO = recordMapper.selectByUserIdAndEngineTaskId(userId, engineTaskId);
             if (recordDO == null) {
-                // 撞了全局唯一键但按归属查不到 = 跨用户撞 uuid,超出模型的异常状态
+                // Hit the global unique key but not found by ownership = cross-user uuid collision, beyond the model
                 throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
             }
             return recordDO.getId();
@@ -83,7 +83,7 @@ public class TranscribeRecordService {
     }
 
     public void complete(Long userId, Long id, AsrTaskDTO result) {
-        // 防御:engine 返回 completed 但 result 缺失时不 NPE,text 落 null
+        // Defensive: engine returns completed but result is missing — no NPE, text falls to null
         String text = result.getResult() != null ? result.getResult().getText() : null;
         recordMapper.complete(id, userId, text, result.getTitle());
     }
@@ -101,7 +101,7 @@ public class TranscribeRecordService {
     }
 
     /**
-     * 不查 text
+     * Does not query text
      */
     public Page<TranscribeRecordDO> pageByUserId(Long userId, long page, long size) {
         return recordMapper.pageByUserId(new Page<>(page, size), userId);
@@ -111,7 +111,7 @@ public class TranscribeRecordService {
         LocalDateTime cutoff = LocalDateTime.now().minusHours(transcribeProperties.getTimeoutHours());
         List<TranscribeRecordDO> records = recordMapper.selectTimeoutRecords(cutoff);
         for (TranscribeRecordDO r : records) {
-            // 逐条走 fail():带 status=0 条件,与轮询回填天然互斥(P3 §2.4)
+            // Row-by-row fail(): with the status=0 condition, naturally mutually exclusive with polling backfill (P3 §2.4)
             fail(r.getUserId(), r.getId(), "转写超时未完成", r.getTitle());
             eventProducer.publishTranscribeTerminal(r.getUserId(), r.getId(), r.getTitle(), "timeout");
         }

@@ -13,7 +13,7 @@ import java.util.TimeZone;
 public class UserApplication {
 
     /**
-     * 全链路 UTC:与 MySQL 容器(UTC)对齐(时区决策见 P3 §9)
+     * Full-chain UTC: aligned with the MySQL container (UTC) (timezone decision in P3 §9)
      */
     static {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"));

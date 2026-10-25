@@ -9,43 +9,43 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/** 配音任务(D6):audio/video 双形态,MySQL 为任务状态权威源(engine 是执行细节)。 */
+/** Dubbing task (D6): audio/video dual-form; MySQL is the authoritative task state (engine is an execution detail). */
 @Data
 @TableName("dubbing_task")
 public class DubbingTaskDO {
 
-    /** 雪花 ID(对外 taskId) */
+    /** Snowflake ID (external taskId) */
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
-    /** 提交用户,数据隔离键 */
+    /** Submitting user, data isolation key */
     private Long userId;
 
-    /** engine 任务ID(uuid hex),追溯用 */
+    /** Engine task ID (uuid hex), for tracing */
     private String engineTaskId;
 
-    /** 来源 URL */
+    /** Source URL */
     private String url;
 
-    /** 展示名(下载完成后回填) */
+    /** Display name (backfilled after download completes) */
     private String title;
 
-    /** audio|video(D5 双形态) */
+    /** audio|video (D5 dual-form) */
     private String kind;
 
     /** 0-init 1-running 2-completed 3-failed */
     private Integer status;
 
-    /** 当前 stage(0 起) */
+    /** Current stage (0-based) */
     private Integer stageIndex;
 
-    /** stage 总数(音频6/视频8,首次轮询以 engine 回包校准) */
+    /** Stage total (audio 6 / video 8, calibrated from the engine response on first poll) */
     private Integer stageTotal;
 
-    /** 产物大小(完成时填;video 任务为 mp4 大小) */
+    /** Artifact size (filled on completion; mp4 size for video tasks) */
     private Long audioBytes;
 
-    /** 失败原因(超长截断) */
+    /** Failure reason (truncated if long) */
     private String errorMsg;
 
     private LocalDateTime createdAt;

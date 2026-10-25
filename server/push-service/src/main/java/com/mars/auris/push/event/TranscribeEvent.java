@@ -18,7 +18,7 @@ import java.util.Map;
 public class TranscribeEvent {
 
     /**
-     * 线上格式是 snake_case(P5 §1.5 消息契约),与 DeliveryTask 同款显式映射
+     * Wire format is snake_case (P5 §1.5 message contract), explicit mapping same as DeliveryTask
      */
     @JsonProperty("event_id")
     private String eventId;

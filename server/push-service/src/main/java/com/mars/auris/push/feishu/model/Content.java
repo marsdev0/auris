@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 纯文本消息内容(msg_type=text 时使用)
+ * Plain-text message content (used when msg_type=text)
  *
  * @author geyan
  * @date 2026/10/2

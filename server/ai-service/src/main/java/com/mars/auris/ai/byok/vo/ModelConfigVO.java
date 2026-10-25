@@ -7,7 +7,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * BYOK 配置回显 VO。密钥治理:只回掩码,密文/明文均不出库
+ * BYOK config echo VO. Key governance: mask only, neither ciphertext nor plaintext leaves the DB
  *
  * @author geyan
  * @date 2026/10/10
@@ -16,47 +16,47 @@ import java.time.LocalDateTime;
 public class ModelConfigVO {
 
     /**
-     * 模型域
+     * Model domain
      */
     private ModelDomain domain;
 
     /**
-     * 供应商:openai_compat / edge_tts / fish_audio / dashscope ...
+     * Provider: openai_compat / edge_tts / fish_audio / dashscope ...
      */
     private String provider;
 
     /**
-     * 接入地址,edge_tts 等免配置的为 null
+     * Endpoint URL, null for key-free configs like edge_tts
      */
     private String baseUrl;
 
     /**
-     * 掩码回显:sk-*** + 尾4位(由 key_hint 拼出),免 key 配置为 null
+     * Masked echo: sk-*** + last 4 (assembled from key_hint), null for key-free configs
      */
     private String apiKeyMasked;
 
     /**
-     * 模型名
+     * Model name
      */
     private String model;
 
     /**
-     * tts 音色
+     * TTS voice
      */
     private String voice;
 
     /**
-     * 校验状态
+     * Validation status
      */
     private ConfigStatus status;
 
     /**
-     * 最近一次连通性校验时间(UTC,无后缀 ISO 字符串)
+     * Last connectivity check time (UTC, suffix-less ISO string)
      */
     private LocalDateTime lastCheckedAt;
 
     /**
-     * 最近一次校验结果:成功为"连通正常 · xxxms",失败为原因(超长截断)
+     * Last check result: success is "connected · xxxms", failure is the reason (truncated if long)
      */
     private String validateDetail;
 }

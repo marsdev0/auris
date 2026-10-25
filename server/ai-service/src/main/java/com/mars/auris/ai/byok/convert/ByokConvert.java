@@ -7,7 +7,7 @@ import com.mars.auris.ai.byok.vo.ModelConfigVO;
 import org.mapstruct.Mapper;
 
 /**
- * DO → VO。密钥治理:密文不出库,回显只拼掩码(sk-*** 为统一占位前缀,非真实前缀)
+ * DO → VO. Key governance: ciphertext never leaves the DB; echo shows mask only (sk-*** is a unified placeholder prefix, not the real one)
  *
  * @author geyan
  * @date 2026/10/10

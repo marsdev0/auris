@@ -44,7 +44,7 @@ public class SecurityConfig {
                                     "/actuator/**").permitAll()  // 认证接口放行
                             .anyRequest().authenticated();  // 其余需要认证
                 })
-                // 账号密码认证之后执行jwtAuthFilter
+                // jwtAuthFilter runs after username/password authentication
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new RestAuthenticationEntryPoint()));
 

@@ -16,7 +16,7 @@ import lombok.NoArgsConstructor;
 public class SubmitTaskResp {
 
     /**
-     * recordId(表主键)。字符串承载:雪花 19 位超出 JS 2^53,数字序列化尾数会变 0
+     * recordId (table primary key). Carried as string: snowflake 19 digits exceed JS 2^53; numeric serialization would zero out the tail
      */
     private String recordId;
 }

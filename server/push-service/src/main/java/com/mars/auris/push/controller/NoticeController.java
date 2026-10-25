@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 通知读取(用户视角闭环:P5 §4 接口契约)
- * 前端:红点 30s 轮询 unread-count;列表页;单条/全部已读
+ * Notification reads (the user-perspective loop: P5 §4 API contract)
+ * Frontend: 30s polling of unread-count for the red dot; list page; single/all mark-read
  *
  * @author geyan
  * @date 2026/9/28

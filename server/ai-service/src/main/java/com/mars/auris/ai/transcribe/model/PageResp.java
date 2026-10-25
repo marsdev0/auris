@@ -7,8 +7,8 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * 分页响应信封,字段与 MP Page 对齐(P3 §4)。
- * 不加 pages/hasNext——前端按 total 自算,YAGNI
+ * Pagination response envelope, fields aligned with MP Page (P3 §4).
+ * No pages/hasNext — the frontend computes from total, YAGNI
  *
  * @author geyan
  * @date 2026/9/12
@@ -19,17 +19,17 @@ import java.util.List;
 public class PageResp<T> {
 
     /**
-     * 总条数
+     * Total count
      */
     private Long total;
 
     /**
-     * 当前页(1 起)
+     * Current page (1-based)
      */
     private Long current;
 
     /**
-     * 每页条数
+     * Page size
      */
     private Long size;
 

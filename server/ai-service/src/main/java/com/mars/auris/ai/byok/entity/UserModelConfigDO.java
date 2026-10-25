@@ -16,63 +16,63 @@ import java.time.LocalDateTime;
 public class UserModelConfigDO {
 
     /**
-     * 自增主键
+     * Auto-increment primary key
      */
     @TableId(type = IdType.AUTO)
     private Long id;
 
     /**
-     * 租户(预留,0=默认/个人;仅列预留,不建隔离逻辑)
+     * Tenant (reserved, 0=default/personal; column reserved only, no isolation logic)
      */
     private Long tenantId;
 
     /**
-     * 所属用户
+     * Owning user
      */
     private Long userId;
 
     /**
-     * 模型域:llm / tts / asr
+     * Model domain: llm / tts / asr
      */
     private String domain;
 
     /**
-     * 供应商:openai_compat / edge_tts / fish_audio / dashscope ...
+     * Provider: openai_compat / edge_tts / fish_audio / dashscope ...
      */
     private String provider;
 
     /**
-     * 接入地址(openai_compat 等自建网关用)
+     * Endpoint URL (for self-hosted gateways like openai_compat)
      */
     private String baseUrl;
 
     /**
-     * API Key 密文,AES-256-GCM: IV+密文+tag
+     * API Key ciphertext, AES-256-GCM: IV+ciphertext+tag
      */
     private byte[] apiKeyCipher;
 
     /**
-     * 主密钥轮换版本
+     * Master key rotation version
      */
     private Integer keyVersion;
 
     /**
-     * 掩码尾 4 位
+     * Masked last 4 chars
      */
     private String keyHint;
 
     /**
-     * 模型名,各域通用(llm/asr/tts 的具体模型标识)
+     * Model name, generic across domains (concrete model id for llm/asr/tts)
      */
     private String model;
 
     /**
-     * tts 音色
+     * TTS voice
      */
     private String voice;
 
     /**
-     * 扩展参数 JSON(温度/语速等)
+     * Extra params JSON (temperature/speech rate etc.)
      */
     private String extraJson;
 
@@ -82,22 +82,22 @@ public class UserModelConfigDO {
     private Integer status;
 
     /**
-     * 最近一次连通性校验时间
+     * Last connectivity check time
      */
     private LocalDateTime lastCheckedAt;
 
     /**
-     * 最近一次校验结果(失败原因/成功摘要+延迟)
+     * Last check result (failure reason / success summary + latency)
      */
     private String validateDetail;
 
     /**
-     * 创建时间
+     * Created at
      */
     private LocalDateTime createdAt;
 
     /**
-     * 更新时间
+     * Updated at
      */
     private LocalDateTime updatedAt;
 

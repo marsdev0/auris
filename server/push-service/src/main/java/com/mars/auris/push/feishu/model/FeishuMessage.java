@@ -7,7 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 飞书 webhook 消息体(msg_type 决定 content/card 二选一)
+ * Feishu webhook message body (msg_type decides between content and card)
  *
  * @author geyan
  * @date 2026/10/2
@@ -19,18 +19,18 @@ import lombok.NoArgsConstructor;
 public class FeishuMessage {
 
     /**
-     * 消息类型:text | interactive(卡片)
+     * Message type: text | interactive (card)
      */
     @JsonProperty("msg_type")
     private String msgType;
 
     /**
-     * 文本内容(msg_type=text 时使用)
+     * Text content (used when msg_type=text)
      */
     private Content content;
 
     /**
-     * 卡片内容(msg_type=interactive 时使用)
+     * Card content (used when msg_type=interactive)
      */
     private Card card;
 }

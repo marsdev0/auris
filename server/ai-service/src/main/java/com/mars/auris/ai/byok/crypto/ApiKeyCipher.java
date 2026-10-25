@@ -15,7 +15,7 @@ import java.util.Arrays;
 import java.util.Base64;
 
 /**
- * BYOK API Key 加解密组件。AES-256-GCM,密文落库格式: IV(12B) + 密文 + tag(16B)
+ * BYOK API Key encryption component. AES-256-GCM, stored ciphertext format: IV(12B) + ciphertext + tag(16B)
  *
  * @author geyan
  * @date 2026/10/10
@@ -50,7 +50,7 @@ public class ApiKeyCipher {
     }
 
     /**
-     * 加密明文 apiKey,返回 IV + 密文 + tag
+     * Encrypt plaintext apiKey, returns IV + ciphertext + tag
      */
     public byte[] encrypt(String plain) {
         try {
@@ -69,7 +69,7 @@ public class ApiKeyCipher {
     }
 
     /**
-     * 解密 encrypt() 产出的 IV + 密文 + tag
+     * Decrypt the IV + ciphertext + tag produced by encrypt()
      */
     public String decrypt(byte[] ivAndCipherText) {
         try {
@@ -84,7 +84,7 @@ public class ApiKeyCipher {
     }
 
     /**
-     * 当前主密钥版本,落库 key_version 用
+     * Current master key version, used for the key_version column
      */
     public int currentVersion() {
         return keyVersion;

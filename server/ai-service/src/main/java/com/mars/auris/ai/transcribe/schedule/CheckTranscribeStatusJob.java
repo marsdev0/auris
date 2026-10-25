@@ -16,11 +16,11 @@ public class CheckTranscribeStatusJob {
     private TranscribeRecordService recordService;
 
     /**
-     * 定时查 transcribe_record，超2h 状态仍然是转写中，修改状态
+     * Periodically check transcribe_record: still transcribing after 2h → update status
      */
     @Scheduled(initialDelay = 600_000, fixedDelay = 600_000)
     public void checkTranscribeStatus() {
-        // 异步处理吧？
+        // Async processing?
        recordService.failTimeoutRecords();
     }
 }

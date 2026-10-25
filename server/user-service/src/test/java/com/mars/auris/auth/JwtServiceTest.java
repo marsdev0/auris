@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * JwtService 四态: 签发/解析/过期/篡改 (+refresh 不能当 access 用)
+ * JwtService four states: issue/parse/expired/tampered (+ refresh cannot be used as access)
  *
  * @author geyan
  * @date 2026/9/7
@@ -62,7 +62,7 @@ class JwtServiceTest {
 
     @Test
     void refreshToken_不能当accessToken用() {
-        // 双 secret: refresh token 用另一把钥匙签发, access 通道验签必然失败
+        // Dual secrets: the refresh token is signed with the other key; verification on the access path must fail
         String refreshToken = jwtService.generateRefreshToken(1L);
 
         assertNull(jwtService.parseAccessToken(refreshToken));

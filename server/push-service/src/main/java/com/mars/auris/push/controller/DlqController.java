@@ -16,8 +16,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 死信运维接口(P5 §1.5 ⑥ / §4):查询走 DB(topic 只是广播位),requeue 复活。
- * TODO 挂账(P5 §2.10):加内部 token 认证,当前先复用用户 JWT 挡住匿名访问
+ * Dead-letter ops endpoints (P5 §1.5 ⑥ / §4): list reads the DB (topic is just a broadcast slot), requeue revives.
+ * TODO deferred (P5 §2.10): add internal token auth; for now user JWT blocks anonymous access
  *
  * @author geyan
  * @date 2026/9/28
@@ -30,7 +30,7 @@ public class DlqController {
     private DeliveryMapper deliveryMapper;
 
     /**
-     * 死信列表(样板层):查 status=FAILED_DQ 的投递记录
+     * Dead-letter list (boilerplate tier): query delivery records with status=FAILED_DQ
      */
     @GetMapping
     public ApiResponse<List<DeliveryDO>> list() {
@@ -41,14 +41,14 @@ public class DlqController {
     }
 
     /**
-     * 死信重投:把一条 failed_dq 的投递复活(4→2, attempt=0, next_retry_at=now)
+     * Dead-letter requeue: revive a failed_dq delivery (4→2, attempt=0, next_retry_at=now)
      */
     @PostMapping("/{id}/requeue")
     public ApiResponse<Boolean> requeue(@PathVariable("id") Long id) {
-        // 决策(P5 §1.5 ⑥ 基线的偏差,偏差记 §9):只拨状态、不发渠道 topic——
-        // 直发时行 status=2,Worker 的 markSent WHERE IN (0,3) 闭合不了,且 30s 内 Scanner
-        // 还会再捞再发(双发);拨回 2 后下一轮(≤30s)RetryScanner 认领重发,闭合顺畅。
-        // WHERE 限定 id + status=4 即 CAS:重复点击/并发 requeue 只有第一次生效,天然幂等。
+        // Decision (a deviation from P5 §1.5 ⑥ baseline, recorded in §9): only flip the status, don't send to the channel topic —
+        // with a direct send the row is status=2, Worker's markSent WHERE IN (0,3) can't close it, and within 30s the Scanner
+        // would pick it up and send again (double delivery); flipping back to 2 lets the next round (≤30s) of RetryScanner claim and resend, closing cleanly.
+        // WHERE scoping to id + status=4 is the CAS: repeated clicks / concurrent requeues — only the first one wins, naturally idempotent.
         int requeue = deliveryMapper.requeue(id, LocalDateTime.now());
         return ApiResponse.ok(requeue > 0);
     }

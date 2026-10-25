@@ -19,7 +19,7 @@ import java.util.List;
 @Service
 public class NoticeService {
 
-    // 把是否新建与通知id分开，不要用null来判断是否新建，这个与id混到一起了
+    // Keep is-new and the notification id separate; don't use null to mean new — it would tangle with id semantics
     public record CreateResult(Long id, boolean created) {}
 
     @Autowired
@@ -45,7 +45,7 @@ public class NoticeService {
             NoticeDO exist = noticeMapper.selectOne(new LambdaQueryWrapper<NoticeDO>()
                     .eq(NoticeDO::getEventId, event.getEventId()));
             if (exist == null) {
-                // 理论不可达
+                // Theoretically unreachable
                 return null;
             }
             return new CreateResult(exist.getId(), false);
@@ -53,7 +53,7 @@ public class NoticeService {
     }
 
     /**
-     * 标题模板:transcribe.completed → 转写完成:《xxx》
+     * Title template: transcribe.completed → "Transcription complete: 《xxx》"
      */
     private String buildTitle(TranscribeEvent event) {
         String title = payloadTitle(event);
@@ -67,7 +67,7 @@ public class NoticeService {
     }
 
     /**
-     * 正文:一句话摘要 + recordId(前端点击跳转用)
+     * Body: one-line summary + recordId (for frontend click-through)
      */
     private String buildContent(TranscribeEvent event) {
         String recordId = event.getPayload() != null ? event.getPayload().getOrDefault("record_id", "") : "";
@@ -81,14 +81,14 @@ public class NoticeService {
     }
 
     /**
-     * payload 里的 title(producer 端 null 已兜底为空串,这里再防一层缺 key)
+     * The title inside payload (producer already null-guards to empty string; one more layer against missing key here)
      */
     private String payloadTitle(TranscribeEvent event) {
         return event.getPayload() != null ? event.getPayload().getOrDefault("title", "") : "";
     }
 
     /**
-     * 我的通知,最新在前(读写模式:P5 §2.8 拉最新 50 条,user_id+created_at 索引)
+     * My notifications, newest first (read pattern: P5 §2.8 pulls the latest 50, user_id+created_at index)
      */
     public List<NoticeDO> listByUser(Long userId, int limit) {
         return noticeMapper.selectList(new QueryWrapper<NoticeDO>()
@@ -98,7 +98,7 @@ public class NoticeService {
     }
 
     /**
-     * 单条已读:条件 UPDATE 命中才 DECR(重复点已是 no-op,计数不会扣穿)
+     * Mark single read: DECR only when the conditional UPDATE hits (repeated clicks are no-ops, the count can't go below zero)
      */
     public boolean markRead(Long userId, Long noticeId) {
         if (noticeMapper.markRead(noticeId, userId) == 1) {
@@ -109,7 +109,7 @@ public class NoticeService {
     }
 
     /**
-     * 全部已读:命中 n 条则计数器整个重置(下次 get 回源 COUNT=0)
+     * Mark all read: n hits → whole counter reset (next get falls back to COUNT=0)
      */
     public int markAllRead(Long userId) {
         int updated = noticeMapper.markAllRead(userId);

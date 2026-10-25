@@ -16,9 +16,9 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * engine 调用统一防腐层:仅管 HTTP 层——可达性与状态码翻译。
- * EngineResp.code 表达"本次业务结果",含义与处置(抛异常 or 当业务结果)由调用域决定,
- * 本骨架不做 code 检查;状态码→业务错误的映射表也由调用域注入
+ * Unified engine call anti-corruption layer: HTTP concerns only — reachability and status-code translation.
+ * EngineResp.code expresses "this call's business result"; its meaning and disposition (throw or treat as result)
+ * belong to the calling domain. This skeleton does no code checking; the status-code → business-error mapping table is also injected by the calling domain
  *
  * @author geyan
  * @date 2026/10/11
@@ -30,9 +30,9 @@ public class EngineClient {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /**
-     * 执行一次 engine 调用:
-     * 连不上/超时 → 503 ENGINE_UNAVAILABLE;HTTP 4xx/5xx → 调用域的映射表;
-     * 其余原样返回 EngineResp,code 处置权在调用方
+     * Execute one engine call:
+     * unreachable/timeout → 503 ENGINE_UNAVAILABLE; HTTP 4xx/5xx → the calling domain's mapping table;
+     * everything else returns EngineResp as-is; code disposition belongs to the caller
      */
     public <T> EngineResp<T> execute(Supplier<EngineResp<T>> call,
                                      Function<RestClientResponseException, AurisException> httpErrorMapping) {
@@ -40,7 +40,7 @@ public class EngineClient {
         try {
             result = call.get();
         } catch (ResourceAccessException e) {
-            // 连不上/超时(engine 停机、网络断):快速失败,503
+            // Unreachable/timeout (engine down, network cut): fail fast, 503
             log.error("engine 不可达: {}", e.getMessage());
             throw new AurisException(AIErrorCode.ENGINE_UNAVAILABLE);
         } catch (RestClientResponseException e) {
@@ -51,7 +51,7 @@ public class EngineClient {
     }
 
     /**
-     * 从 engine 的错误响应里抠 message(FastAPI HTTPException 的 body 形如 {"detail": "..."} )
+     * Extract message from the engine's error response (FastAPI HTTPException body looks like {"detail": "..."})
      */
     public String extractDetail(RestClientResponseException e) {
         try {
@@ -60,7 +60,7 @@ public class EngineClient {
                 return node.get("detail").asText();
             }
         } catch (Exception ignored) {
-            // body 不是 JSON(或读不出来):兜底用原始 body,抠不出来就 null
+            // Body is not JSON (or unreadable): fall back to the raw body; null if nothing extractable
         }
         String body = e.getResponseBodyAsString();
         return body.isBlank() ? null : body;

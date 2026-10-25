@@ -5,8 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * 服务位: 2 (user-service)
- * code 规则: {httpStatus}_2{序号}
+ * Service slot: 2 (user-service)
+ * code pattern: {httpStatus}_2{sequence}
  *
  * @author geyan
  * @date 2026/9/6

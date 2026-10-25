@@ -35,8 +35,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * RecordService 纯单元测试(mock mapper,不起 Spring 容器):
- * 覆盖 P3 Step 7 的核心语义——预占回填、入口 source、幂等条件、归属删除。
+ * RecordService pure unit test (mock mapper, no Spring container):
+ * covers the core semantics of P3 Step 7 — pre-claim backfill, entry source, idempotency condition, ownership-scoped delete.
  *
  * @author geyan
  * @date 2026/9/13
@@ -56,11 +56,11 @@ class TranscribeRecordServiceTest {
     @InjectMocks
     private TranscribeRecordService recordService;
 
-    // ========== createTask:预占 ==========
+    // ========== createTask: pre-claim ==========
 
     @Test
     void createTask_insertsWithSourceAndTitle_returnsSnowflakeId() {
-        // 模拟 MP 的 ASSIGN_ID 回填:insert 时把生成 id 写回 entity
+        // Simulate MP's ASSIGN_ID backfill: insert writes the generated id back into the entity
         doAnswer(inv -> {
             TranscribeRecordDO item = inv.getArgument(0);
             item.setId(2098825091037216769L);
@@ -72,7 +72,7 @@ class TranscribeRecordServiceTest {
         assertEquals(2098825091037216769L, id);
         ArgumentCaptor<TranscribeRecordDO> captor = ArgumentCaptor.forClass(TranscribeRecordDO.class);
         verify(recordMapper).insert(captor.capture());
-        // 预占语义:user_id 隔离键 + engine_task_id + 入口 + transcribing 初始态 + title
+        // Pre-claim semantics: user_id isolation key + engine_task_id + entry + transcribing initial state + title
         assertEquals(1L, captor.getValue().getUserId());
         assertEquals("task-abc", captor.getValue().getEngineTaskId());
         assertEquals(TranscribeConst.SOURCE_URL, captor.getValue().getSource());
@@ -90,7 +90,7 @@ class TranscribeRecordServiceTest {
         existing.setId(222L);
         when(recordMapper.selectByUserIdAndEngineTaskId(1L, "task-abc")).thenReturn(existing);
 
-        // 续用已存在记录的真 recordId,不返回插入未成功的假 id(111)
+        // Reuses the existing record's real recordId; doesn't return the failed insert's fake id (111)
         assertEquals(222L, recordService.createTask(1L, "task-abc", TranscribeConst.SOURCE_URL, null));
     }
 
@@ -99,7 +99,7 @@ class TranscribeRecordServiceTest {
         doAnswer(inv -> {
             throw new DuplicateKeyException("uk");
         }).when(recordMapper).insert(any(TranscribeRecordDO.class));
-        // 撞了全局唯一键但按归属查不到 = 跨用户撞 uuid,超出模型
+        // Hit the global unique key but not found by ownership = cross-user uuid collision, beyond the model
         when(recordMapper.selectByUserIdAndEngineTaskId(1L, "task-abc")).thenReturn(null);
 
         AurisException ex = assertThrows(AurisException.class,
@@ -107,7 +107,7 @@ class TranscribeRecordServiceTest {
         assertEquals(CommonErrorCode.INTERNAL_ERROR.getCode(), ex.getCode());
     }
 
-    // ========== complete:回填(幂等由 SQL 条件保证,mapper 收到正确参数) ==========
+    // ========== complete: backfill (idempotency guaranteed by SQL condition; mapper receives correct params) ==========
 
     @Test
     void complete_passesTextAndTitleToConditionalUpdate() {
@@ -124,7 +124,7 @@ class TranscribeRecordServiceTest {
 
     @Test
     void complete_resultMissing_textFallsBackNull_noNpe() {
-        // engine 返回 completed 但 result 缺失:不 NPE,text 落 null
+        // Engine returns completed but result is missing: no NPE, text falls to null
         AsrTaskDTO dto = new AsrTaskDTO();
         dto.setResult(null);
 
@@ -133,7 +133,7 @@ class TranscribeRecordServiceTest {
         verify(recordMapper).complete(2L, 1L, null, null);
     }
 
-    // ========== saveTranscribeSyncResult:同步直插终态 + 入库失败不抛 ==========
+    // ========== saveTranscribeSyncResult: sync direct-insert terminal state + insert failure doesn't throw ==========
 
     @Test
     void saveSync_directInsertAsCompleted_neverThrows() {
@@ -143,7 +143,7 @@ class TranscribeRecordServiceTest {
                 .thenThrow(new RuntimeException("db down"))
                 .thenReturn(1);
 
-        // 故障语义:engine 已成功,insert 失败只 log 不阻断响应
+        // Failure semantics: engine already succeeded; insert failure only logs, doesn't block the response
         recordService.saveTranscribeSyncResult(1L, new EngineResp<>(0, "ok", data));
 
         ArgumentCaptor<TranscribeRecordDO> captor = ArgumentCaptor.forClass(TranscribeRecordDO.class);
@@ -153,7 +153,7 @@ class TranscribeRecordServiceTest {
         assertEquals("同步结果", captor.getValue().getText());
     }
 
-    // ========== delete:0 行 false 由调用方转 404 ==========
+    // ========== delete: 0 rows → false, caller turns into 404 ==========
 
     @Test
     void delete_mapperReceivesIsolationKey() {
@@ -163,7 +163,7 @@ class TranscribeRecordServiceTest {
         assertEquals(false, recordService.deleteByUserIdAndRecordId(1L, 9L));
     }
 
-    // ========== failTimeout:逐条标失败 + 发事件(Step2 改造后的新语义) ==========
+    // ========== failTimeout: row-by-row fail + event emit (new semantics after the Step2 rework) ==========
 
     @Test
     void failTimeout_marksEachAndPublishesEvent() {
@@ -175,9 +175,9 @@ class TranscribeRecordServiceTest {
         int n = recordService.failTimeoutRecords();
 
         assertEquals(1, n);
-        // 逐条走 fail():status=0 条件与轮询回填互斥
+        // Row-by-row fail(): the status=0 condition is mutually exclusive with polling backfill
         verify(recordMapper).fail(9L, 7L, "转写超时未完成", "超时单集");
-        // 每条发 auris-event(超时也是终态,通知要触达)
+        // Each row emits auris-event (timeout is also a terminal state; the notification must reach)
         verify(eventProducer).publishTranscribeTerminal(7L, 9L, "超时单集", "timeout");
     }
 }

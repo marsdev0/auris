@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import java.util.concurrent.TimeUnit;
 
 /**
- * refreshToken 的存取，实现细节(Redis/key格式/TTL)对外透明
+ * Storage and retrieval of refreshTokens; implementation details (Redis/key format/TTL) are opaque outside
  *
  * @author geyan
  * @date 2026/9/6
@@ -25,7 +25,7 @@ public class RefreshTokenStore {
     private JwtProperties jwtProperties;
 
     /**
-     * TTL 与 refreshToken 自身的 JWT 过期时间保持同步, 避免改配置后存储侧提前/滞后失效
+     * TTL stays in sync with the refreshToken's own JWT expiry, avoiding early/late invalidation on the storage side after config changes
      */
     public void save(Long userId, String refreshToken) {
         redisTemplate.opsForValue()

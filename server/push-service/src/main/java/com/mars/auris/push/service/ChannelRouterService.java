@@ -28,19 +28,19 @@ public class ChannelRouterService {
     private DeliveryProducer deliveryProducer;
 
     /**
-     * 渠道的投递
-     * 1. 写表
-     * 2. kafka通知消费者查表
+     * Channel delivery:
+     * 1. write the table
+     * 2. the Kafka notification consumer queries the table
      */
     public void route(Long notificationId, TranscribeEvent e) {
         if (e == null) {
             return;
         }
-        // 1. 查询支持的渠道
+        // 1. Query supported channels
         int channelMask = preferenceCache.maskOf(e.getUserId(), e.getType());
         for (Channel ch : Channel.values()) {
             if ((channelMask & ch.getBit()) == 0) {
-                // 不支持该渠道
+                // Channel not supported
                 continue;
             }
             DeliveryDO r = new DeliveryDO();
@@ -51,8 +51,8 @@ public class ChannelRouterService {
             try {
                 deliveryMapper.insert(r);
             } catch (DuplicateKeyException exception) {
-                // uk命中，检查status是否为0，如果是，消息可能从未送达，此时需要补发
-                // 补发安全: worker端 markSent CAS幂等吸收，这里可以使用at-least-once
+                // uk hit — check if status is 0; if so the message may never have been delivered, needs a make-up send
+                // Make-up send is safe: worker-side markSent CAS absorbs it idempotently; at-least-once is fine here
                 LambdaQueryWrapper<DeliveryDO> query = new LambdaQueryWrapper<>();
                 query.eq(DeliveryDO::getNotificationId, notificationId)
                         .eq(DeliveryDO::getChannel, r.getChannel());
@@ -67,7 +67,7 @@ public class ChannelRouterService {
                 continue;
             }
 
-            // 2. kafka通知消费者
+            // 2. Kafka notification consumer
             deliveryProducer.sendDelivery(DeliveryTask.builder()
                     .deliveryId(String.valueOf(r.getId()))
                     .noticeId(String.valueOf(r.getNotificationId()))

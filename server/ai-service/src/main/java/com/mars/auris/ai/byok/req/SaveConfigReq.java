@@ -7,8 +7,8 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 保存 BYOK 配置请求。apiKey 明文仅此一次上行,落库即密文;
- * 域相关规则(openai_compat 必填 baseUrl / llm 必填 model)在 Service 层校验
+ * Save BYOK config request. apiKey plaintext goes up exactly once, stored as ciphertext;
+ * domain-specific rules (openai_compat requires baseUrl / llm requires model) validated in the Service layer
  *
  * @author geyan
  * @date 2026/10/10
@@ -17,40 +17,40 @@ import lombok.Data;
 public class SaveConfigReq {
 
     /**
-     * 模型域,决定落 uk(tenant_id,user_id,domain) 哪个槽位
+     * Model domain, decides which uk(tenant_id,user_id,domain) slot this lands in
      */
     @NotNull(message = "domain 不能为空")
     private ModelDomain domain;
 
     /**
-     * 供应商:openai_compat / edge_tts / fish_audio / dashscope ...
+     * Provider: openai_compat / edge_tts / fish_audio / dashscope ...
      */
     @NotBlank(message = "provider 不能为空")
     @Size(max = 64, message = "provider 最长 64")
     private String provider;
 
     /**
-     * 接入地址,edge_tts 等免配置的传 null
+     * Endpoint URL, null for key-free providers like edge_tts
      */
     @Size(max = 512, message = "baseUrl 最长 512")
     private String baseUrl;
 
     /**
-     * 明文 key:非空 = 换 key/首次填;空 = 沿用旧 key(编辑语义)。
-     * 不加 @NotBlank——空是合法业务语义,免 key 配置也是空
+     * Plaintext key: non-empty = replace/first-time; empty = keep old key (edit semantics).
+     * No @NotBlank — empty is a valid business semantic, key-free configs are also empty
      */
     @Size(max = 512, message = "apiKey 最长 512")
     private String apiKey;
 
     /**
-     * 模型名,必填,Service 校验(该域具体模型标识,如 gpt-4o / qwen3-asr / cosyvoice-v2;
-     * edge_tts 等无显式模型的 provider 填 default)
+     * Model name, required, validated in Service (concrete model id, e.g. gpt-4o / qwen3-asr / cosyvoice-v2;
+     * providers without an explicit model like edge_tts fill in default)
      */
     @Size(max = 128, message = "model 最长 128")
     private String model;
 
     /**
-     * tts 音色(如 zh-CN-XiaoxiaoNeural);音色参数,与 model 正交,不替代模型
+     * TTS voice (e.g. zh-CN-XiaoxiaoNeural); a voice param, orthogonal to model, does not replace it
      */
     @Size(max = 128, message = "voice 最长 128")
     private String voice;
