@@ -9,9 +9,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/v1/asr': {
-        target: 'http://localhost:18000',
+        target: 'http://localhost:8080', // 走 gateway(P12-D6 纪律:前端不直连任何后端)
         changeOrigin: true,
-        ws: true, // /v1/asr/stream 是 WebSocket
+        ws: true, // /v1/asr/stream 是 WebSocket(WS 经 gateway 转发)
       },
       '/v1/byok': {
         target: 'http://localhost:8080',
