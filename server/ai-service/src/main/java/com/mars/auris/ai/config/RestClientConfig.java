@@ -51,6 +51,16 @@ public class RestClientConfig {
                 .build();
     }
 
+    /** 配音产物流式代理(D6):文件下载档,read 60s */
+    @Bean
+    @Qualifier("engineAsset")
+    public RestClient engineAssetRestClient(RestClient.Builder builder) {
+        return builder
+                .baseUrl(properties.getBaseUrl())
+                .requestFactory(httpComponents(Duration.ofSeconds(3), Duration.ofSeconds(60)))
+                .build();
+    }
+
 
     private static ClientHttpRequestFactory httpComponents(Duration connect, Duration read) {
         return ClientHttpRequestFactoryBuilder.httpComponents()

@@ -6,10 +6,16 @@ spring:
       server:
         webflux:
           routes:
+            # engine 直通路由(P12-D6:前端全部流量必须走 gateway 的纪律落地;
+            # engine 未注册 Nacos,故 uri 直连——网关仍是唯一入口,鉴权/限流位不缺)
+            - id: engine-asr
+              uri: http://127.0.0.1:18000
+              predicates:
+                - Path=/v1/asr/**
             - id: ai-service
               uri: lb://ai-service          # 从 Nacos 服务发现找名为 ai-service 的实例
               predicates:
-                - Path=/v1/transcribe/**
+                - Path=/v1/transcribe/**, /v1/byok/**, /v1/dubbing/**   # dubbing=P12-D6
               filters:
                 - name: RequestRateLimiter
                   args:
