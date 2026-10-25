@@ -3,7 +3,7 @@
  * 模型配置页(BYOK,P12-1 §6)。
  *
  * 数据源:services/modelConfig.ts 真实接口(经 gateway 归 ai-service);
- * validate 待后端 D2 落地,当前点击提示未上线。
+ * 测试连接已接真实链路(llm 域;回写/失败原因展示依赖 ai 侧 D2-3)。
  */
 import { ref, reactive, onMounted } from 'vue'
 import {
@@ -103,12 +103,14 @@ async function save(d: ModelDomain) {
   }
 }
 
-/** 测试连接:engine 实测回写 verified/failed(后端 D2 未上线,当前提示) */
+/** 测试连接:engine 实测(llm 已通);成败 toast 即时反馈,徽章状态依赖 ai 侧回写 */
 async function validate(d: ModelDomain) {
   validating[d] = true
   try {
-    configs.value[d] = await validateConfig(d)
-    showToast(d, true, '连通正常')
+    const ok = await validateConfig(d)
+    showToast(d, ok, ok ? '连通正常' : '校验失败')
+    // 重拉列表刷徽章(回写落地后 status 即时变 verified/failed);不动 drafts,避免覆盖未保存的编辑
+    configs.value = await listConfigs()
   } catch (e) {
     showToast(d, false, e instanceof Error ? e.message : '校验失败')
   } finally {
