@@ -27,7 +27,7 @@ from loguru import logger
 from engine.config import DUB
 from engine.dubbing.types import DubStatus, Stage
 
-_V = 1
+_V = 2   # v2(D5):段结构 str→Seg 断裂 + kind 字段;v1 任务不迁移(重跑比迁移便宜)
 
 # 阶段输入产物:消费者阶段 → 文件名(原 stage{N}.json 的内容命名修订)
 _DATA_FILE = {
@@ -43,13 +43,13 @@ def task_dir(task_id: str) -> Path:
 
 def save_checkpoint(task_id: str, *, url: str, stage_index: int,
                     status: DubStatus = DubStatus.RUNNING,
-                    title: str | None = None) -> None:
+                    title: str | None = None, kind: str | None = None) -> None:
     """原子写:写 checkpoint.json.tmp → os.replace。写一半 crash 盘上仍是旧完整版。
 
     status 落盘 name.lower()("running" 等,人可读);转换封装在此,调用方传枚举。
     """
     payload = {"v": _V, "task_id": task_id, "url": url, "title": title,
-               "stage_index": int(stage_index), "status": status.name.lower()}
+               "stage_index": stage_index, "status": status.name.lower(), "kind": kind}
     d = task_dir(task_id)
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / "checkpoint.json.tmp"
@@ -83,6 +83,15 @@ def read_stage_data(task_id: str, stage_index: Stage) -> list[str] | None:
     if not p.exists():
         return None
     return json.loads(p.read_text())
+
+
+def write_segs(task_id: str, name: str, segs: list) -> None:
+    (task_dir(task_id) / name).write_text(json.dumps(
+        [s.model_dump() for s in segs], ensure_ascii=False))
+
+def read_segs(task_id: str, name: str) -> list:
+    from engine.dubbing.types import Seg
+    return [Seg(**d) for d in json.loads((task_dir(task_id) / name).read_text())]
 
 
 def scan_pending() -> list[str]:

@@ -21,7 +21,8 @@ def fetch(url: str) -> SourceResult:
 
     out = Path(tempfile.mkdtemp(prefix="auris-bili-", dir=TMP_DIR))
     opts = {
-        "format": "bestaudio/best",  # 只拉音频流
+        "format": "bestvideo+bestaudio/best",  # D5:视频+音频流(DASH),yt-dlp 调 ffmpeg 合流
+        "merge_output_format": "mp4",
         "outtmpl": f"{out}/%(id)s.%(ext)s",
         "quiet": True,
         "noprogress": True,
@@ -32,7 +33,7 @@ def fetch(url: str) -> SourceResult:
             info = ydl.extract_info(url, download=True)
             file = next(out.iterdir())
             title = info.get("title") or "B站视频"
-            return SourceResult(audio_path=file, title=title[:200], site="bilibili")
+            return SourceResult(audio_path=None, video_path=file, title=title[:200], site="bilibili")
     except Exception as e:
         shutil.rmtree(out, ignore_errors=True)   # 失败清场,半截下载不留
         raise SourceError(f"bilibili下载失败: {str(e)[:120]}")

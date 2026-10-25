@@ -32,15 +32,21 @@ async def get_task(task_id: str):
 
 
 @router.get("/task/{task_id}/asset")
-async def asset(task_id: str, request: Request):
+async def asset(task_id: str, request: Request, kind: str = "audio"):
+    """产物下发(D5 §6):kind=audio(D4 narration.mp3)|video(D5 output.mp4)|srt(D5 dub.srt)。"""
     from pathlib import Path
     t = tasks.get_task(task_id)
-    if t is None or t.status != DubStatus.COMPLETED or not t.audio_path:
+    if t is None or t.status != DubStatus.COMPLETED:
         raise HTTPException(404, "asset not found")
-    p = Path(t.audio_path)
-    if not p.exists():
+    if kind == "srt":
+        p = Path(t.video_path).parent / "dub.srt" if t.video_path else None
+    else:
+        attr = {"audio": "audio_path", "video": "video_path"}.get(kind)
+        p = Path(getattr(t, attr)) if attr and getattr(t, attr) else None
+    if p is None or not p.exists():
         raise HTTPException(404, "asset not found")
 
+    media = {"audio": "audio/mpeg", "video": "video/mp4", "srt": "application/x-subrip"}[kind]
     size = p.stat().st_size
     headers = {"accept-ranges": "bytes"}
     rng = request.headers.get("range")
@@ -58,9 +64,9 @@ async def asset(task_id: str, request: Request):
             data = f.read(end - start + 1)
         headers["content-range"] = f"bytes {start}-{end}/{size}"
         headers["content-length"] = str(len(data))
-        return Response(data, status_code=206, media_type="audio/mpeg", headers=headers)
+        return Response(data, status_code=206, media_type=media, headers=headers)
 
     with open(p, "rb") as f:
         data = f.read()
     headers["content-length"] = str(len(data))
-    return Response(data, media_type="audio/mpeg", headers=headers)
+    return Response(data, media_type=media, headers=headers)

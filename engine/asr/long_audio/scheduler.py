@@ -22,7 +22,7 @@ on_done 回调:每段终态(无论成败)触发一次,供任务表推进度—�
 import asyncio
 import random
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from loguru import logger
 
@@ -42,6 +42,9 @@ class SegmentResult:
     text: str          # 失败段为空串,由 assembler 决定占位策略
     ok: bool
     latency_ms: float  # 单段耗时(含重试),观测用
+    # 句级明细(相对段内秒,D5 时间戳透出):provider verbose_json 的 segments 原样带出,
+    # 时间轴拼接在 dubbing._transcribe_seg 消费侧完成——asr 域不长 dubbing 依赖
+    seg_detail: list[tuple[float, float, str]] = field(default_factory=list)
 
 
 # 段终态回调:(seg_index, ok) -> None
@@ -89,6 +92,8 @@ class Scheduler:
                         return SegmentResult(
                             index=seg.index, start=seg.start, end=seg.end,
                             text=res.text.strip(), ok=True, latency_ms=latency,
+                            seg_detail=[(s.start, s.end, s.text) for s in res.segments]
+                            if res.segments else [],
                         )
                     except Exception as e:  # 含 TimeoutError;段级隔离,不冒泡
                         last_err = e

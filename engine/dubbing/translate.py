@@ -14,6 +14,8 @@ import re
 
 from loguru import logger
 
+from engine.dubbing.timeline import target_chars
+from engine.dubbing.types import Seg
 from engine.llm.client import get_llm_client
 
 _CJK_RATIO = 0.30          # CJK 占比阈值:超过判中文源,跳过翻译
@@ -27,6 +29,16 @@ _SYSTEM_PROMPT = (
 _SINGLE_SYSTEM_PROMPT = (
     "你是技术视频字幕译者,英译中:忠实原意,口语化,适合朗读;"
     "技术术语与人名保留英文;只输出译文,不解释。"
+)
+# Seg 版(D5):在 D4 五条规则之上增第六条——译文长度服从行内目标字数约束
+_SYSTEM_PROMPT_SEG = (
+    "你是技术视频字幕译者,英译中,译文需与画面时间窗对齐。规则:"
+    "①忠实原意,口语化,适合朗读;"
+    "②技术术语保留英文(API、Kubernetes、React、gRPC);"
+    "③人名保留英文;"
+    '④每项输入格式为 "编号| 原文 |窗口N秒|目标≤M字",输出 JSON 数组,每项 "编号|译文";'
+    "⑤译文长度服从行内目标字数(±20%),超长宁可精炼不可截断意思;"
+    "⑥不添油加醋,不解释。"
 )
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.+?)\s*```", re.DOTALL)
 
@@ -172,6 +184,57 @@ async def _translate_single(idx: int, text: str) -> tuple[int, str]:
     ]
     raw = await get_llm_client().llm_chat(msgs, temperature=0.1)
     return idx, raw.strip()
+
+
+async def translate_segs(segs: list[Seg]) -> list[Seg]:
+    """D5 视频任务:英文 Seg[] → 中文 Seg[](译文回填原窗,窗口约束进 prompt)。
+
+    与 translate()(音频,str 版)并存:聚批/编号对齐/容错降级链复用,
+    差异仅在 prompt 每项带「窗口N秒|目标≤M字」与输出的窗口回填。
+    """
+    units = [s.text for s in segs]
+    if _is_mostly_cjk(units):
+        logger.info(f"跳过翻译:CJK 源直通({len(segs)} 段)")
+        return segs
+
+    batches = _make_batches(units)
+    results: dict[int, str] = {}
+    for bi, batch in enumerate(batches):
+        items = [f"{i}| {text} |窗口{segs[i].end - segs[i].start:.1f}s|"
+                 f"目标≤{target_chars(segs[i].end - segs[i].start)}字"
+                 for i, text in batch]
+        span = f"{batch[0][0]}~{batch[-1][0]}"
+        logger.info(f"批 {bi + 1}/{len(batches)} 开始: 段 {span}, 带窗约束")
+        try:
+            results.update(await _translate_batch_seg(items, batch))
+            logger.info(f"批翻译 {bi + 1}/{len(batches)} 完成({len(batch)} 段,带窗)")
+        except Exception as e:
+            logger.warning(f"批 {bi + 1}/{len(batches)} 失败({e}),降级逐段")
+            for i, text in batch:
+                logger.info(f"段 {i} 直翻(降级): {text[:40]!r}")
+                try:
+                    _, t = await _translate_single(i, text)
+                except Exception as se:
+                    raise RuntimeError(f"段 {i} 翻译失败(批降级后仍失败): {se}") from se
+                results[i] = t
+    if len(results) != len(segs):
+        raise RuntimeError(f"翻译回填数不一致: {len(results)}/{len(segs)}")
+    return [Seg(text=results[i], start=segs[i].start, end=segs[i].end)
+            for i in range(len(segs))]
+
+
+async def _translate_batch_seg(items: list[str], batch: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    """Seg 版单批翻译:带窗 prompt → llm_chat(json_mode) → 解析回填(复用 D4 解析链)。"""
+    msgs = [
+        {"role": "system", "content": _SYSTEM_PROMPT_SEG},
+        {"role": "user", "content": json.dumps(items, ensure_ascii=False)},
+    ]
+    raw = await get_llm_client().llm_chat(msgs, temperature=0.1, json_mode=True)
+    logger.debug(f"批原始输出预览: {raw[:120]!r}")
+    pairs = _parse_translations(raw, batch)
+    if all(not t for _, t in pairs):
+        raise ValueError("批译文全空(编号未对上)")
+    return pairs
 
 
 async def translate(units: list[str]) -> list[str]:
