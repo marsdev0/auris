@@ -1,6 +1,6 @@
 # Copyright (c) 2026 marsdev0
 # Licensed under the MIT License. See the LICENSE file for details.
-"""服务级配置(进程/HTTP/CORS)。"""
+"""Service-level config (process/HTTP/CORS)."""
 import os
 
 

@@ -1,13 +1,13 @@
-"""translate stage:英文段列表 → 中文段列表
+"""Translate stage: English segment list -> Chinese segment list.
 
-中文源直通(_is_mostly_cjk 判定);英文源聚批编号翻译:
-批级失败降级逐段,逐段重试耗尽才上抛(pipeline 层转 FAILED)。
+Chinese sources pass through (_is_mostly_cjk); English sources go batch-numbered translation:
+batch failure degrades to per-segment; segment retry exhaustion propagates up (pipeline turns it into FAILED).
 
-与 llm client 的对接口径:
-- llm_chat(..., temperature=0.1, json_mode=True)——编号任务对温度敏感,
-  json_object 由端点约束输出(D1-mini §1 兼容降级已内建);
-- LLM 未配置时 llm_chat 抛 LlmError,这里不做兜底直通——英文任务必须失败得明确
-  (D4 验收标准 4)。
+Contract with the llm client:
+- llm_chat(..., temperature=0.1, json_mode=True) — numbered tasks are temperature-sensitive,
+  json_object constrains output at the endpoint (D1-mini §1 compat fallback built in);
+- When LLM is unconfigured llm_chat raises LlmError; no passthrough fallback here — English tasks must fail loudly
+  (D4 acceptance criterion 4).
 """
 import json
 import re
@@ -18,8 +18,8 @@ from engine.dubbing.timeline import target_chars
 from engine.dubbing.types import Seg
 from engine.llm.client import get_llm_client
 
-_CJK_RATIO = 0.30          # CJK 占比阈值:超过判中文源,跳过翻译
-_BATCH_CHAR_LIMIT = 3000   # 聚批字符上限:300 段 ≈ 10 批,批内段落互为上下文
+_CJK_RATIO = 0.30          # CJK ratio threshold: above → Chinese source, skip translation
+_BATCH_CHAR_LIMIT = 3000   # batching char cap: 300 segments ≈ 10 batches, segments within a batch contextualize each other
 
 _SYSTEM_PROMPT = (
     "你是技术视频字幕译者,英译中。规则:①忠实原意,口语化,适合朗读;"
@@ -30,7 +30,7 @@ _SINGLE_SYSTEM_PROMPT = (
     "你是技术视频字幕译者,英译中:忠实原意,口语化,适合朗读;"
     "技术术语与人名保留英文;只输出译文,不解释。"
 )
-# Seg 版(D5):在 D4 五条规则之上增第六条——译文长度服从行内目标字数约束
+# Seg variant (D5): adds a sixth rule on top of D4's five — translation length obeys the per-line char target
 _SYSTEM_PROMPT_SEG = (
     "你是技术视频字幕译者,英译中,译文需与画面时间窗对齐。规则:"
     "①忠实原意,口语化,适合朗读;"
@@ -44,11 +44,11 @@ _FENCE_RE = re.compile(r"```(?:json)?\s*(.+?)\s*```", re.DOTALL)
 
 
 def _is_mostly_cjk(units: list[str]) -> bool:
-    """中文源判定
+    """Chinese-source detection.
 
-    口径:全部段拼接、去空白后的字符里,CJK 基本区(\\u4e00-\\u9fff)占比 > 阈值。
-    跨段全局统计(非逐段判):英文视频里偶尔引一句中文不会误判为中文源。
-    无有效字符返回 False(空列表交给下游空判,不在这里搞特殊分支)。
+    Criterion: among all segments concatenated with whitespace removed, CJK basic block (\u4e00-\u9fff) ratio > threshold.
+    Global stat across segments (not per-segment): an occasional Chinese quote in an English video does not misclassify.
+    Returns False with no effective chars (empty lists go to the downstream empty check, no special-casing here).
     """
     chars = [c for u in units for c in u if not c.isspace()]
     if not chars:
@@ -61,30 +61,30 @@ def _is_mostly_cjk(units: list[str]) -> bool:
 
 
 def _make_batches(units: list[str]) -> list[list[tuple[int, str]]]:
-    """聚批(§4.2):贪心累加,批内总字符 <= _BATCH_CHAR_LIMIT;单段自身超限独立成批。
+    """Batching (§4.2): greedy accumulation, in-batch total chars <= _BATCH_CHAR_LIMIT; an over-limit segment stands alone.
 
-    贪心即最优:每批尽量装满再开新批 → 批数最少 → LLM 调用次数最少。
-    空文本段照常占位(编号对齐需要它,回填时对应空译文)。
+    Greedy is optimal: fill each batch before opening a new one → fewest batches → fewest LLM calls.
+    Empty-text segments still occupy a slot (numbered alignment needs it; backfilled as empty translation).
     """
     batches: list[list[tuple[int, str]]] = []
     cur: list[tuple[int, str]] = []
     cur_len = 0
     for i, text in enumerate(units):
-        # 封批条件:当前批非空 且 再加就超限。
-        # 「cur 非空」的检查不能省:单段自身超限时 cur 为空,若直接封批会产生空批;
-        # 空批进 LLM 调用既浪费又可能触发端点报错。超限单段让它独自入批,下一段自然封它。
+        # Batch-close condition: current batch non-empty AND adding one more exceeds the limit.
+        # The "cur non-empty" check must not be dropped: when a single segment itself exceeds the limit cur is empty,
+        # and closing then would produce an empty batch; an empty batch wastes an LLM call and may trip the endpoint.
         if cur and cur_len + len(text) > _BATCH_CHAR_LIMIT:
             batches.append(cur)
             cur, cur_len = [], 0
         cur.append((i, text))
         cur_len += len(text)
-    if cur:  # 尾批:循环结束剩余的未封批
+    if cur:  # tail batch: unclosed remainder after the loop
         batches.append(cur)
     return batches
 
 
 def _build_messages(batch: list[tuple[int, str]]) -> list[dict]:
-    """prompt 构造(§4.3 骨架,首轮,联调迭代)。"""
+    """Prompt construction (§4.3 skeleton, first round, iterate during integration)."""
     items = [f"{i}| {text}" for i, text in batch]
     return [
         {"role": "system", "content": _SYSTEM_PROMPT},
@@ -93,10 +93,10 @@ def _build_messages(batch: list[tuple[int, str]]) -> list[dict]:
 
 
 def _loads_llm_json(raw: str) -> list:
-    """两级容错 parse(§4.2):直接 parse → 剥围栏 parse;均失败 raise(触发上层降级)。
+    """Two-level tolerant parse (§4.2): direct parse → strip fences then parse; both fail → raise (triggers upstream degradation).
 
-    json_object 模式下部分端点强制顶层为对象,模型会把数组包一层
-    (如 {"translations": [...]}):合法 JSON 但非数组,统一在此剥出。
+    Under json_object mode some endpoints force a top-level object, the model wraps the array
+    (e.g. {"translations": [...]}): valid JSON but not an array, unwrapped uniformly here.
     """
 
     def _to_arr(v) -> list:
@@ -118,15 +118,15 @@ def _loads_llm_json(raw: str) -> list:
         m = _FENCE_RE.search(raw)
         if not m:
             raise ValueError("LLM 输出非 JSON 且无围栏可剥")
-        arr = _to_arr(json.loads(m.group(1)))  # 剥后仍失败则自然 raise
+        arr = _to_arr(json.loads(m.group(1)))  # failure after stripping still raises naturally
         logger.debug("llm 输出解析: 剥 markdown 围栏后成功")
         return arr
 
 
 def _parse_translations(raw: str, batch: list[tuple[int, str]]) -> list[tuple[int, str]]:
-    """解析回填(§4.2):LLM 原始输出 → [(全局段号, 译文), ...],顺序与 batch 一致。
+    """Parse and backfill (§4.2): raw LLM output -> [(global segment no., translation), ...], order aligned with batch.
 
-    漏号:空串占位并 warning(不静默);多号/无效项:忽略并告警。
+    Missing numbers: empty-string placeholder + warning (never silent); extras/invalid items: ignored + warning.
     """
     got: dict[int, str] = {}
     for item in _loads_llm_json(raw):
@@ -148,7 +148,7 @@ def _parse_translations(raw: str, batch: list[tuple[int, str]]) -> list[tuple[in
             out.append((i, got[i]))
         else:
             missing.append(i)
-            out.append((i, ""))  # 漏号占位
+            out.append((i, ""))  # missing-number placeholder
     if missing:
         logger.warning(f"翻译漏号(空串占位): {missing}")
     extras = sorted(set(got) - {i for i, _ in batch})
@@ -160,7 +160,7 @@ def _parse_translations(raw: str, batch: list[tuple[int, str]]) -> list[tuple[in
 
 
 async def _translate_batch(batch: list[tuple[int, str]]) -> list[tuple[int, str]]:
-    """单批翻译:prompt → llm_chat(json_mode) → 解析回填。批级失败 raise(由上层降级)。"""
+    """Single batch: prompt -> llm_chat(json_mode) -> parse & backfill. Batch failure raises (degraded upstream)."""
     raw = await get_llm_client().llm_chat(_build_messages(batch),
                                           temperature=0.1, json_mode=True)
     logger.debug(f"批原始输出预览: {raw[:120]!r}")
@@ -171,10 +171,10 @@ async def _translate_batch(batch: list[tuple[int, str]]) -> list[tuple[int, str]
 
 
 async def _translate_single(idx: int, text: str) -> tuple[int, str]:
-    """降级路径:单段直翻(无编号协议)。
+    """Degraded path: direct single-segment translation (no numbered protocol).
 
-    llm_chat 已内建 3 次指数退避重试,段级不再包一层——再包等于 9 次调用,
-    对本地/免费端点是无意义放大;重试耗尽上抛由 translate 转 FAILED。
+    llm_chat already has 3 exponential-backoff retries built in; another layer here would mean 9 calls —
+    pointless amplification for local/free endpoints; exhaustion propagates and translate turns it into FAILED.
     """
     if not text.strip():
         return idx, ""
@@ -187,10 +187,10 @@ async def _translate_single(idx: int, text: str) -> tuple[int, str]:
 
 
 async def translate_segs(segs: list[Seg]) -> list[Seg]:
-    """D5 视频任务:英文 Seg[] → 中文 Seg[](译文回填原窗,窗口约束进 prompt)。
+    """D5 video tasks: English Seg[] -> Chinese Seg[] (translation backfilled into original windows, window constraint in prompt).
 
-    与 translate()(音频,str 版)并存:聚批/编号对齐/容错降级链复用,
-    差异仅在 prompt 每项带「窗口N秒|目标≤M字」与输出的窗口回填。
+    Coexists with translate() (audio, str version): batching/numbered alignment/tolerant degradation chain reused,
+    the only differences are the per-item "window Ns|target ≤M chars" prompt and window backfill on output.
     """
     units = [s.text for s in segs]
     if _is_mostly_cjk(units):
@@ -224,7 +224,7 @@ async def translate_segs(segs: list[Seg]) -> list[Seg]:
 
 
 async def _translate_batch_seg(items: list[str], batch: list[tuple[int, str]]) -> list[tuple[int, str]]:
-    """Seg 版单批翻译:带窗 prompt → llm_chat(json_mode) → 解析回填(复用 D4 解析链)。"""
+    """Seg-variant single batch: windowed prompt -> llm_chat(json_mode) -> parse & backfill (reuses D4 parse chain)."""
     msgs = [
         {"role": "system", "content": _SYSTEM_PROMPT_SEG},
         {"role": "user", "content": json.dumps(items, ensure_ascii=False)},
@@ -238,10 +238,10 @@ async def _translate_batch_seg(items: list[str], batch: list[tuple[int, str]]) -
 
 
 async def translate(units: list[str]) -> list[str]:
-    """stage ③ 入口:英文段列表 → 中文段列表(§4.2)。
+    """Stage ③ entry: English segment list -> Chinese segment list (§4.2).
 
-    中文源直通;英文源聚批批翻,批失败该批降级逐段,段失败(重试耗尽)整任务上抛。
-    返回列表长度与输入一致,按全局段号对齐。
+    Chinese sources pass through; English go batch translation, batch failure degrades per-segment, segment exhaustion propagates.
+    Returned list length matches input, aligned by global segment number.
     """
     if _is_mostly_cjk(units):
         logger.info(f"跳过翻译:CJK 源直通({len(units)} 段)")

@@ -1,15 +1,15 @@
 # Copyright (c) 2026 marsdev0
 # Licensed under the MIT License. See the LICENSE file for details.
-"""ASR 域配置(转写/VAD/长音频分段/流式/调度闸门)。env 前缀 ASR_*。"""
+"""ASR domain config (transcription/VAD/long-audio segmentation/streaming/scheduling gate). Env prefix ASR_*."""
 import os
 
 
 class AsrSettings:
     DEFAULT_PROVIDER = os.getenv("ASR_PROVIDER", "whisper")
-    MODEL = os.getenv("ASR_MODEL", "medium")  # MVP 先 medium;验收按 RTF 调 large-v3/small
-    DEVICE = os.getenv("ASR_DEVICE", "auto")  # Mac 实际 cpu
+    MODEL = os.getenv("ASR_MODEL", "medium")  # MVP starts with medium; tune to large-v3/small by RTF at acceptance
+    DEVICE = os.getenv("ASR_DEVICE", "auto")  # effectively cpu on Mac
     COMPUTE = os.getenv("ASR_COMPUTE", "int8")
-    LANG = os.getenv("ASR_LANG", "")   # 空=自动检测源语言;翻译归 LLM(D4 分工),勿改回 zh
+    LANG = os.getenv("ASR_LANG", "")   # empty = auto-detect source language; translation belongs to LLM (D4 split), do not set back to zh
     SAMPLE_RATE = 16000
     VAD_THRESHOLD = float(os.getenv("ASR_VAD_THRESHOLD", "0.5"))
     VAD_MIN_SILENCE_MS = int(os.getenv("ASR_VAD_MIN_SILENCE_MS", "300"))
@@ -21,40 +21,40 @@ class AsrSettings:
     QWEN3_API_KEY = os.getenv("ASR_QWEN3_API_KEY", "123456")
     QWEN3_MODEL = os.getenv("ASR_QWEN3_MODEL", "Qwen3-ASR-1.7B-4bit")
 
-    # ------ 长音频分段 ------
-    SEG_TARGET_MIN_S = int(os.getenv("ASR_SEG_TARGET_MIN_S", "10"))  # 段最短
-    SEG_TARGET_MAX_S = int(os.getenv("ASR_SEG_TARGET_MAX_S", "15"))  # 段最长(实测:不可抢占单元粒度,见 P8 §8.3;60s 时 sync under load 3.6s,15s 时 1.18s)
-    SEG_MIN_SILENCE_MS = int(os.getenv("ASR_SEG_MIN_SILENCE_MS", "500"))  # 批处理判静音(流式 300)
-    SEG_OVERLAP_MS = int(os.getenv("ASR_SEG_OVERLAP_MS", "300"))  # 尾延,只进 pcm 不进报告边界
-    SEG_SNAP_WINDOW_S = float(os.getenv("ASR_SEG_SNAP_WINDOW_S", "2.0"))  # 硬切对齐搜索窗
+    # ------ Long-audio segmentation ------
+    SEG_TARGET_MIN_S = int(os.getenv("ASR_SEG_TARGET_MIN_S", "10"))  # min segment length
+    SEG_TARGET_MAX_S = int(os.getenv("ASR_SEG_TARGET_MAX_S", "15"))  # max segment length (measured: non-preemptible unit granularity, see P8 §8.3; 60s segs → sync under load 3.6s, 15s → 1.18s)
+    SEG_MIN_SILENCE_MS = int(os.getenv("ASR_SEG_MIN_SILENCE_MS", "500"))  # batch silence detection (streaming uses 300)
+    SEG_OVERLAP_MS = int(os.getenv("ASR_SEG_OVERLAP_MS", "300"))  # tail padding, goes into pcm only, not reported boundaries
+    SEG_SNAP_WINDOW_S = float(os.getenv("ASR_SEG_SNAP_WINDOW_S", "2.0"))  # hard-cut alignment search window
 
-    # ------ 长音频段级容错 ------
-    SEG_TIMEOUT_S = float(os.getenv("ASR_SEG_TIMEOUT_S", "120"))  # 单段超时(60s段 whisper CPU RTF≈1 不误杀)
-    SEG_RETRY = int(os.getenv("ASR_SEG_RETRY", "3"))  # 段级重试
+    # ------ Long-audio per-segment fault tolerance ------
+    SEG_TIMEOUT_S = float(os.getenv("ASR_SEG_TIMEOUT_S", "120"))  # per-segment timeout (60s seg, whisper CPU RTF≈1, no false kill)
+    SEG_RETRY = int(os.getenv("ASR_SEG_RETRY", "3"))  # segment-level retries
 
-    # ------ 长音频任务 ------
-    # 低于阈值整段转写, 高于走分段并发
+    # ------ Long-audio tasks ------
+    # Below threshold: whole-audio transcription; above: segmented concurrency
     LONG_THRESHOLD_S = int(os.getenv("ASR_LONG_THRESHOLD_S", "600"))
-    # 内存护栏:解码峰值 ~6.9MB/分钟,4h ≈ 920MB,超过直接拒绝
+    # Memory guard: decode peak ~6.9MB/min, 4h ≈ 920MB, reject beyond that
     LONG_MAX_DURATION_S = int(os.getenv("ASR_LONG_MAX_DURATION_S", "14400"))
-    TASK_TTL_H = int(os.getenv("ASR_TASK_TTL_H", "24"))  # 任务表过期(小时)
+    TASK_TTL_H = int(os.getenv("ASR_TASK_TTL_H", "24"))  # task table expiry (hours)
 
-    # ------ 实时语音识别 ------
-    # 注:getenv 出来恒为 str,必须就地转型再进协议 JSON——服务端对字符串类型参数
-    # 的 run-task 校验宽松(task-started 照回),但收到音频帧后会以 1011
-    # "parse parameters failed" 断连(实测 2026-08-26),错误出现在音频阶段极难定位
+    # ------ Realtime streaming ASR ------
+    # Note: getenv always returns str; must cast in place before putting into protocol JSON — the server is lenient
+    # about string-typed params in run-task (task-started still returns), but disconnects with 1011
+    # "parse parameters failed" once audio frames arrive (measured 2026-08-26); error surfacing at the audio stage is very hard to locate
     QAS_MODEL = os.getenv("ASR_QAS_MODEL", "qwen-audio-3.0-asr-flash-streaming")
     QAS_BASE_URL = os.getenv("ASR_QAS_BASE_URL", "wss://dashscope.aliyuncs.com/api-ws/v1/inference")
     QAS_API_KEY = os.getenv("ASR_QAS_API_KEY", "")
-    QAS_HEARTBEAT = os.getenv("ASR_QAS_HEARTBEAT", "true").lower() == "true"  # 60s 静音保活;心跳帧 provider 内过滤
-    QAS_SILENCE_MS = int(os.getenv("ASR_QAS_SILENCE_MS", "400"))  # max_sentence_silence(交互场景;默认 1300 偏会议)
+    QAS_HEARTBEAT = os.getenv("ASR_QAS_HEARTBEAT", "true").lower() == "true"  # 60s silence keepalive; heartbeat frames filtered inside provider
+    QAS_SILENCE_MS = int(os.getenv("ASR_QAS_SILENCE_MS", "400"))  # max_sentence_silence (interactive; default 1300 suits meetings)
 
-    # ------ 调度闸门(原 ASR_LONG_CONCURRENCY 已废弃,M 语义归 GATE_TOTAL) ------
-    GATE_TOTAL = int(os.getenv("ASR_GATE_TOTAL", "3"))  # M：总闸门(原值 3 平移;P10 实测校准,宁欠勿超)
-    GATE_RESERVE = int(os.getenv("ASR_GATE_RESERVE", "1"))  # R：给同步请求预留的位数
-    TASK_CONCURRENCY = int(os.getenv("ASR_TASK_CONCURRENCY", "2"))  # 单任务段级
-    GATE_QUEUE_MAX = int(os.getenv("ASR_GATE_QUEUE_MAX", "4096"))  # 等待者上限(15s 段粒度下单任务 ~470 waiter,512 会误拒;多任务叠加才该拒)
-    GATE_AGE_S = int(os.getenv("ASR_GATE_AGE_S", "30"))  # aging步长
+    # ------ Scheduling gate (former ASR_LONG_CONCURRENCY deprecated; M semantics moved to GATE_TOTAL) ------
+    GATE_TOTAL = int(os.getenv("ASR_GATE_TOTAL", "3"))  # M: total gate (carried over from 3; calibrated by P10 load test, prefer under)
+    GATE_RESERVE = int(os.getenv("ASR_GATE_RESERVE", "1"))  # R: slots reserved for sync requests
+    TASK_CONCURRENCY = int(os.getenv("ASR_TASK_CONCURRENCY", "2"))  # per-task segment concurrency
+    GATE_QUEUE_MAX = int(os.getenv("ASR_GATE_QUEUE_MAX", "4096"))  # waiter cap (15s segments → ~470 waiters per task; 512 would falsely reject; only multi-task stacking should)
+    GATE_AGE_S = int(os.getenv("ASR_GATE_AGE_S", "30"))  # aging step
     GATE_MODE = os.getenv("ASR_GATE_MODE", "semaphore")      # semaphore|priority
-    SYNC_MAX_WAIT_S = float(os.getenv("ASR_SYNC_MAX_WAIT_S", "10"))  # sync 等待上限
-    RETRY_BACKOFF_BASE_S = float(os.getenv("ASR_RETRY_BACKOFF_BASE_S", "1"))  # 重试退避基数
+    SYNC_MAX_WAIT_S = float(os.getenv("ASR_SYNC_MAX_WAIT_S", "10"))  # sync wait cap
+    RETRY_BACKOFF_BASE_S = float(os.getenv("ASR_RETRY_BACKOFF_BASE_S", "1"))  # retry backoff base

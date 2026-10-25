@@ -3,7 +3,7 @@ from engine.dubbing.align import _ffmpeg
 
 
 async def mux(video: str, audio_m4a: str, out_mp4: str) -> None:
-    """copy 优先;容器不兼容(如 vp9+webm 入 mp4 的边缘 case)fallback 重编码 h264。"""
+    """Copy first; on container incompatibility (e.g. vp9+webm into mp4 edge case) fall back to re-encoding h264."""
     try:
         await _ffmpeg("-i", str(video), "-i", str(audio_m4a),
                       "-map", "0:v:0", "-map", "1:a:0",

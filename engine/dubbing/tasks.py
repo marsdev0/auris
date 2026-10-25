@@ -48,8 +48,8 @@ def set(task_id: str, status: DubStatus | None = None, stage_index: int | None =
 
 
 def _guess_kind(url: str) -> str:
-    """URL 预判任务形态(D5 决策 4):哔哩哔哩/视频后缀→video,其余→audio。
-    预判错误的兜底:download 后 video_path 为 None 会在 copyfile 处报错入 FAILED,可见。"""
+    """URL-based task kind guess (D5 decision 4): bilibili/video extension → video, otherwise audio.
+    Wrong guess backstop: after download a None video_path errors at copyfile into FAILED, visible."""
     from engine.sources import bilibili, direct
     if bilibili.match(url) or direct.is_video_url(url):
         return "video"
@@ -76,15 +76,15 @@ async def cleanup_expired() -> None:
         expired = [tid for tid, t in _tasks.items() if now - t.updated_at > ttl]
         for tid in expired:
             _tasks.pop(tid)
-            shutil.rmtree(DUB.DIR / tid, ignore_errors=True)  # 整任务目录:快照+产物一起回收
+            shutil.rmtree(DUB.DIR / tid, ignore_errors=True)  # whole task dir: snapshot + artifacts reclaimed together
         if expired:
             logger.info(f"清理过期播报任务 {len(expired)} 个")
         await asyncio.sleep(3600)
 
 
 async def resume_pending() -> None:
-    """启动扫描: kill -9 等中断的任务从断点续跑。单任务恢复失败只污染自身。
-    按 checkpoint.kind 分流(D5):video 用 VStage+_run_video(8 stage),audio 用 Stage+_run(6 stage)。"""
+    """Startup scan: resume tasks interrupted by kill -9 etc. A single task's recovery failure pollutes only itself.
+    Dispatch by checkpoint.kind (D5): video → VStage+_run_video (8 stages), audio → Stage+_run (6 stages)."""
     from engine.dubbing import checkpoint as ckp
     from engine.dubbing.pipeline import _run, _run_video
     from engine.dubbing.types import VStage

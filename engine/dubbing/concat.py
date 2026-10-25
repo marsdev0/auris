@@ -1,4 +1,4 @@
-"""mp3拼接
+"""MP3 concatenation
 """
 import asyncio
 import shutil
@@ -8,7 +8,7 @@ from loguru import logger
 
 
 def ensure_ffmpeg() -> None:
-    """启动时探测，缺失不crash进程，任务走到这步才失败"""
+    """Probe at startup; missing binary does not crash the process — the task fails only when it reaches this step"""
     if shutil.which("ffmpeg") is None:
         logger.warning("ffmpeg 未安装:播报任务的拼接 stage 将失败(brew install ffmpeg)")
 
@@ -19,8 +19,8 @@ async def concat_mp3(parts: list[Path], out: Path) -> None:
         raise RuntimeError("ffmpeg 未安装,无法拼接音频")
 
     lst = out.parent / "list.txt"
-    # 相对 cwd(=out.parent)的路径:分片在 chunks/ 子目录,p.name 会丢前缀导致
-    # concat demuxer 打不开(实测 2026-10-21:Impossible to open '0000.mp3')
+    # Paths relative to cwd (= out.parent): parts live in the chunks/ subdir; p.name would drop the prefix and the
+    # concat demuxer would fail to open (measured 2026-10-21: Impossible to open '0000.mp3')
     lst.write_text("\n".join(f"file '{p.relative_to(out.parent)}'" for p in parts), encoding="utf-8")
     try:
         proc = await asyncio.create_subprocess_exec(ffmpeg,

@@ -1,15 +1,15 @@
-"""engine 平台 LLM 客户端
+"""Engine platform LLM client.
 
-OpenAI 兼容出站(AsyncOpenAI),构建形态对齐 byok/factory.py::build_llm_client;
-D1 后半(llm-gateway)落地后 base_url 换向网关,消费方代码不动(D1-mini 方案 §3)。
+OpenAI-compatible egress (AsyncOpenAI), construction aligned with byok/factory.py::build_llm_client;
+After D1 part 2 (llm-gateway) lands, base_url flips to the gateway, consumer code untouched (D1-mini plan §3).
 
-策略:
-- 空配置不拦启动:首次调用才校验并抛 LlmError——中文源任务(跳过翻译)与其余域不受影响;
-- 调用级重试 3 次指数退避(1s/2s/4s + jitter):瞬态失败(5xx/超时/断连/429 限流)自愈,
-  耗尽抛 LlmError,处置权在调用域;
-- 确定性错误不重试:4xx(除 429)直接抛——参数/凭证/模型名错误重试无意义;
-  response_format 兼容问题除外,去掉参数重试一次;
-- 计量日志:每次调用打 model/token 用量/延迟,为 P9 配额攒数据,不做计费。
+Policies:
+- Missing config does not block startup: validated on first call, raising LlmError — Chinese-source tasks (skip translation) and other domains unaffected;
+- Call-level retry, 3x exponential backoff (1s/2s/4s + jitter): transient failures (5xx/timeout/disconnect/429) self-heal;
+  exhaustion raises LlmError, disposition belongs to the calling domain;
+- Deterministic errors are not retried: 4xx (except 429) raises immediately — bad params/credentials/model names will not heal;
+  response_format incompatibility is the exception: drop the param and retry once;
+- Metering log: model/token usage/latency per call, data for P9 quotas, no billing.
 """
 import asyncio
 import random
@@ -21,17 +21,17 @@ from openai import AsyncOpenAI, APIStatusError
 
 from engine.config import LLM
 
-_TIMEOUT = httpx.Timeout(60.0, connect=5.0)  # 生产档 read 60s(批量翻译响应慢;byok probe 是 30s 档)
+_TIMEOUT = httpx.Timeout(60.0, connect=5.0)  # production read 60s (batch translation responses are slow; byok probe is the 30s tier)
 _RETRY = 3
 _BACKOFF_S = 1.0
 
 
 class LlmError(Exception):
-    """LLM 调用失败(含未配置)。"""
+    """LLM call failure (including unconfigured)."""
 
 
 class LlmClient:
-    """Lazy 单例包装:首次调用才建 AsyncOpenAI,空配置在那一刻才报错。"""
+    """Lazy singleton wrapper: AsyncOpenAI built on first call; missing config errors at that moment."""
 
     def __init__(self):
         self._client: AsyncOpenAI | None = None
@@ -47,11 +47,11 @@ class LlmClient:
 
     async def llm_chat(self, messages: list[dict], *, model: str | None = None,
                        temperature: float = 0.1, json_mode: bool = False) -> str:
-        """一次对话调用,返回首选项文本。
+        """One chat call, returns the first choice text.
 
-        model 不传时用 LLM.MODEL(平台默认);外部传入(如 BYOK 用户模型)
-        时以传入为准。temperature 默认 0.1(批量编号翻译对温度敏感);json_mode 请求
-        JSON 输出,端点不支持 response_format 时自动去掉参数重试(兼容面优先)。
+        Without model, uses LLM.MODEL (platform default); an external model (e.g. BYOK user model)
+        takes precedence. temperature defaults to 0.1 (numbered batch translation is temperature-sensitive); json_mode
+        requests JSON output; endpoints without response_format support get the param dropped and one retry (compat first).
         """
         client = self._ensure()
         use_model = model or LLM.MODEL
@@ -73,16 +73,16 @@ class LlmClient:
                             f"ct={u.completion_tokens if u else -1} {latency_ms:.0f}ms")
                 return resp.choices[0].message.content or ""
             except Exception as e:
-                # json_mode 兼容降级:400 且与 response_format 相关,去掉参数重试一次
+                # json_mode compat fallback: 400 related to response_format → drop the param and retry once
                 if use_json and isinstance(e, APIStatusError) \
                         and e.status_code == 400 and "response_format" in str(e):
                     use_json = False
                     continue
-                # 确定性 4xx(除 429 限流):参数/凭证/模型名错误,重试无意义直接抛
+                # Deterministic 4xx (except 429 rate limit): params/credentials/model errors, retrying is pointless — raise
                 if isinstance(e, APIStatusError) and e.status_code is not None \
                         and 400 <= e.status_code < 500 and e.status_code != 429:
                     raise LlmError(f"LLM 请求被拒绝({e.status_code}): {e}") from e
-                # 瞬态(5xx/超时/断连/429):退避重试
+                # Transient (5xx/timeout/disconnect/429): backoff retry
                 last = e
                 logger.warning(f"llm chat 第{attempt}/{_RETRY}次失败: {e}")
                 if attempt < _RETRY:
@@ -94,7 +94,7 @@ _client: LlmClient | None = None
 
 
 def get_llm_client() -> LlmClient:
-    """进程单例(对称 tts/service.get_tts_service)。"""
+    """Process singleton (symmetric with tts/service.get_tts_service)."""
     global _client
     if _client is None:
         _client = LlmClient()
@@ -102,7 +102,7 @@ def get_llm_client() -> LlmClient:
 
 
 def warn_if_unconfigured() -> None:
-    """启动提醒(main.py lifespan 调):空配置只告警,不拦启动。"""
+    """Startup reminder (called from main.py lifespan): missing config warns only, never blocks startup."""
     if not (LLM.BASE_URL and LLM.API_KEY):
         logger.warning("LLM 端点未配置(LLM_BASE_URL/LLM_API_KEY):涉及 LLM 的功能(如翻译)不可用")
     elif not LLM.MODEL:

@@ -1,9 +1,9 @@
-"""文本切断： ASR段文本 -> TTS朗读单元列表
+"""Text chunking: ASR segment texts -> TTS narration unit list.
 
-规则：
-1. 单段 <= limit 直接过
-2. 超长段：按句末标点切开再谈心聚合到limit
-3. 无标点长流：按limit硬切
+Rules:
+1. segment <= limit passes through
+2. over-long segment: split at sentence-final punctuation, then greedily aggregate to limit
+3. punctuation-free long stream: hard cut at limit
 """
 
 import re
@@ -22,7 +22,7 @@ def chunk(units: list[str], limit: int = 500) -> list[str]:
             continue
         buf = ""
         for piece in (s for s in _SENT_SPLIT.split(u) if s):
-            if len(piece) > limit: # 单句仍超（无标点）：硬切
+            if len(piece) > limit: # single sentence still over (no punctuation): hard cut
                 if buf:
                     out.append(buf)
                     buf = ""

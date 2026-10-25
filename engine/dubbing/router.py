@@ -33,7 +33,7 @@ async def get_task(task_id: str):
 
 @router.get("/task/{task_id}/asset")
 async def asset(task_id: str, request: Request, kind: str = "audio"):
-    """产物下发(D5 §6):kind=audio(D4 narration.mp3)|video(D5 output.mp4)|srt(D5 dub.srt)。"""
+    """Artifact delivery (D5 §6): kind=audio (D4 narration.mp3) | video (D5 output.mp4) | srt (D5 dub.srt)."""
     from pathlib import Path
     t = tasks.get_task(task_id)
     if t is None or t.status != DubStatus.COMPLETED:
@@ -54,7 +54,7 @@ async def asset(task_id: str, request: Request, kind: str = "audio"):
         start_s, end_s = m.group(1), m.group(2)
         if start_s:  # "a-b" / "a-"
             start, end = int(start_s), int(end_s) if end_s else size - 1
-        else:  # "-n":最后 n 字节
+        else:  # "-n": last n bytes
             start, end = max(size - int(end_s), 0), size - 1
         end = min(end, size - 1)
         if start > end or start >= size:

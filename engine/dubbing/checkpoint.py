@@ -1,5 +1,5 @@
 """
-checkpoint.json 结构:
+checkpoint.json structure:
 {
   "v": 1,
   "task_id": "9f3c2a7b1e5d40f6a8c2",
@@ -10,13 +10,13 @@ checkpoint.json 结构:
 }
 
 data/dubbing/{task_id}/
-    checkpoint.json   # 断点快照(结构见下)——与模块同名
-    src.bin           # 1.下载的音频(D3 是"临时目录+用完即删",本站改落任务目录,终态+TTL 才清)
-    transcript.json   # 2.转写产物·英文段(=3.translate 的输入)
-    translation.json  # 3.翻译产物·中文段(=4.chunk 的输入)
-    units.json        # 4.朗读单元(=5.synth 的输入)
-    chunks/*.mp3      # 5.逐段合成
-    narration.mp3     # 6.成品
+    checkpoint.json   # resume snapshot (structure below) — named after the module
+    src.bin           # 1. downloaded audio (D3 used "temp dir + delete after use"; now persisted in task dir, cleaned at terminal state + TTL)
+    transcript.json   # 2. transcription artifact, English segments (= input of 3.translate)
+    translation.json  # 3. translation artifact, Chinese segments (= input of 4.chunk)
+    units.json        # 4. narration units (= input of 5.synth)
+    chunks/*.mp3      # 5. per-segment synthesis
+    narration.mp3     # 6. final artifact
 """
 import json
 import os
@@ -27,13 +27,13 @@ from loguru import logger
 from engine.config import DUB
 from engine.dubbing.types import DubStatus, Stage
 
-_V = 2   # v2(D5):段结构 str→Seg 断裂 + kind 字段;v1 任务不迁移(重跑比迁移便宜)
+_V = 2   # v2 (D5): segment structure str→Seg break + kind field; v1 tasks not migrated (rerun is cheaper than migration)
 
-# 阶段输入产物:消费者阶段 → 文件名(原 stage{N}.json 的内容命名修订)
+# Stage input artifacts: consumer stage → filename (renamed from stage{N}.json to content naming)
 _DATA_FILE = {
-    Stage.TRANSLATE: "transcript.json",   # translate 的输入(=transcribe 产物,英文段)
-    Stage.CHUNK: "translation.json",      # chunk 的输入(=translate 产物,中文段)
-    Stage.SYNTH: "units.json",            # synth 的输入(=chunk 产物,朗读单元)
+    Stage.TRANSLATE: "transcript.json",   # translate's input (= transcribe artifact, English segments)
+    Stage.CHUNK: "translation.json",      # chunk's input (= translate artifact, Chinese segments)
+    Stage.SYNTH: "units.json",            # synth's input (= chunk artifact, narration units)
 }
 
 
@@ -44,9 +44,9 @@ def task_dir(task_id: str) -> Path:
 def save_checkpoint(task_id: str, *, url: str, stage_index: int,
                     status: DubStatus = DubStatus.RUNNING,
                     title: str | None = None, kind: str | None = None) -> None:
-    """原子写:写 checkpoint.json.tmp → os.replace。写一半 crash 盘上仍是旧完整版。
+    """Atomic write: checkpoint.json.tmp → os.replace. A crash mid-write leaves the previous complete version.
 
-    status 落盘 name.lower()("running" 等,人可读);转换封装在此,调用方传枚举。
+    status is persisted as name.lower() ("running" etc., human-readable); conversion lives here, callers pass the enum.
     """
     payload = {"v": _V, "task_id": task_id, "url": url, "title": title,
                "stage_index": stage_index, "status": status.name.lower(), "kind": kind}
@@ -73,7 +73,7 @@ def load_checkpoint(task_id: str) -> dict | None:
 
 
 def write_stage_data(task_id: str, stage_index: Stage, units: list[str]) -> None:
-    """阶段输入产物落盘(先于 save_checkpoint 调用):按消费者阶段映射文件名。"""
+    """Persist stage input artifacts (before save_checkpoint): filename mapped by consumer stage."""
     (task_dir(task_id) / _DATA_FILE[stage_index]).write_text(
         json.dumps(units, ensure_ascii=False))
 
@@ -95,7 +95,7 @@ def read_segs(task_id: str, name: str) -> list:
 
 
 def scan_pending() -> list[str]:
-    """启动扫描: status==running 的任务——kill -9 时 checkpoint 停留 running。"""
+    """Startup scan: tasks with status==running — checkpoint stays running on kill -9."""
     out: list[str] = []
     if not DUB.DIR.exists():
         return out

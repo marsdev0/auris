@@ -1,4 +1,4 @@
-"""stage 顺序编排"""
+"""Stage orchestration"""
 
 import asyncio
 import json
@@ -42,11 +42,11 @@ def _fail(task_id: str, url: str, title: str | None, e: Exception, kind: str = "
             kind=kind,
         )
     except Exception:
-        pass  # 落盘失败不掩盖原错误
+        pass  # persist failure must not mask the original error
 
 
 async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> None:
-    """任务执行体，任务stage异常 -> failed"""
+    """Task runner; any stage exception -> failed"""
     from engine.sources import fetch_source
     from engine.sources.base import SourceError
 
@@ -57,18 +57,18 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
     tasks.set(task_id, DubStatus.RUNNING, stage_index=int(start_stage), title=title)
 
     try:
-        # 1. download → src.bin(常驻任务目录,终态+TTL 才清)
+        # 1. download → src.bin (persisted in task dir, cleaned at terminal state + TTL)
         if start_stage <= Stage.DOWNLOAD:
             src = await fetch_source(url)
             title = src.title
             tasks.set(task_id, title=title)
             shutil.copyfile(src.audio_path, tdir / "src.bin")
-            src.audio_path.unlink(missing_ok=True)  # 临时文件用完即删
+            src.audio_path.unlink(missing_ok=True)  # temp file deleted after use
             ckp.save_checkpoint(
                 task_id, url=url, stage_index=int(Stage.TRANSCRIBE), title=title
             )
 
-        # 2. transcribe → transcript.json(英文段)
+        # 2. transcribe → transcript.json (English segments)
         if start_stage <= Stage.TRANSCRIBE:
             tasks.set(task_id, stage_index=int(Stage.TRANSCRIBE))
             audio = (tdir / "src.bin").read_bytes()
@@ -78,10 +78,10 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
                 task_id, url=url, stage_index=int(Stage.TRANSLATE), title=title
             )
         else:
-            # 说明已经转写了
+            # already transcribed
             units = ckp.read_stage_data(task_id, Stage.TRANSLATE)
 
-        # 3. translate → translation.json(中文段;中文源内部直通)
+        # 3. translate → translation.json (Chinese segments; Chinese sources pass through internally)
         if start_stage <= Stage.TRANSLATE:
             tasks.set(task_id, stage_index=int(Stage.TRANSLATE))
             units = await tsl.translate(units)
@@ -92,7 +92,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
         else:
             units = ckp.read_stage_data(task_id, Stage.CHUNK)
 
-        # 4. chunk → units.json(朗读单元)
+        # 4. chunk → units.json (narration units)
         if start_stage <= Stage.CHUNK:
             tasks.set(task_id, stage_index=int(Stage.CHUNK))
             units_out = chunk(units, DUB.CHUNK_MAX)
@@ -105,7 +105,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
         else:
             units_out = ckp.read_stage_data(task_id, Stage.SYNTH)
 
-        # 5. synth → chunks/*.mp3(stage 级粒度:resume 整段重跑,覆盖写)
+        # 5. synth → chunks/*.mp3 (stage granularity: resume reruns the whole stage, overwrite)
         if start_stage <= Stage.SYNTH:
             tasks.set(task_id, stage_index=int(Stage.SYNTH))
             out_dir = tdir / "chunks"
@@ -118,9 +118,9 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
                 task_id, url=url, stage_index=int(Stage.CONCAT), title=title
             )
 
-        # 6. concat → narration.mp3(终态先落盘,清理放最后)
+        # 6. concat → narration.mp3 (terminal state persisted first, cleanup last)
         tasks.set(task_id, stage_index=int(Stage.CONCAT))
-        parts = sorted((tdir / "chunks").glob("*.mp3"))  # 从盘上取,不依赖前分支变量
+        parts = sorted((tdir / "chunks").glob("*.mp3"))  # take from disk, do not depend on earlier branch vars
         final = tdir / "narration.mp3"
         await concat_mp3(parts, final)
         ckp.save_checkpoint(
@@ -151,7 +151,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
 
 
 async def _transcribe(audio: bytes, task_id: str) -> list[str]:
-    """音频字节 → 朗读段文本列表。双路径复用 asr 域(long_audio/tasks.py::_run 同构)。"""
+    """Audio bytes -> narration segment text list. Dual path reuses the asr domain (isomorphic to long_audio/tasks.py::_run)."""
     provider = get_asr_service().get(None)
 
     y = await asyncio.to_thread(load_audio, audio)
@@ -162,7 +162,7 @@ async def _transcribe(audio: bytes, task_id: str) -> list[str]:
         )
 
     if duration < ASR.LONG_THRESHOLD_S:
-        # 短路整段:拿全文单元素(无停顿边界,chunker 兜底)
+        # Short-circuit whole audio: single element with full text (no pause boundaries, chunker as backstop)
         pcm = (np.clip(y, -1.0, 1.0) * 32767).astype("<i2").tobytes()
         async with gate.short_lease(task_id):
             res = await provider.transcribe(pcm_to_wav(pcm))
@@ -172,7 +172,7 @@ async def _transcribe(audio: bytes, task_id: str) -> list[str]:
     segs, _ = await asyncio.to_thread(Segmenter().segment, audio)
     results = await Scheduler().transcribe_all(segs, provider, task_id=task_id)
     assembled = Assembler.assemble(results)
-    # 失败段([转写失败] 占位)剔除——不朗读占位符;全失败则自然进 chunk 后的空判
+    # Failed segments ([transcription failed] placeholder) removed — never read placeholders aloud; all-failed falls into the post-chunk empty check
     return [s.text.strip() for s in assembled.segments if s.ok and s.text.strip()]
 
 
@@ -181,15 +181,15 @@ async def _synth_with_retry(provider, text: str):
     for attempt in range(1, _TTS_RETRY + 1):
         try:
             return await provider.synthesize(text)
-        except Exception as e:  # edge-tts 瞬态失败(限流/断连),退避重试
+        except Exception as e:  # edge-tts transient failures (rate limit/disconnect), backoff retry
             last = e
             logger.warning(f"tts 段失败 第{attempt}/{_TTS_RETRY}次: {e}")
-            await asyncio.sleep(attempt)  # 1s/2s 线性退避,免费通道不需要指数级
+            await asyncio.sleep(attempt)  # 1s/2s linear backoff, no exponential needed for the free channel
     raise RuntimeError(f"TTS 重试耗尽: {last}")
 
 
 async def _transcribe_seg(audio: bytes, task_id: str) -> list[Seg]:
-    """_transcribe 的 Seg 版:音频字节 → 句级带时间戳段"""
+    """Seg variant of _transcribe: audio bytes -> sentence-level timestamped segments"""
     provider = get_asr_service().get(None)
     y = await asyncio.to_thread(load_audio, audio)
     duration = len(y) / ASR.SAMPLE_RATE
@@ -209,16 +209,16 @@ async def _transcribe_seg(audio: bytes, task_id: str) -> list[Seg]:
             raise RuntimeError("ASR 返回空文本(音频格式不支持或无语音)")
         return [
             Seg(text=res.text.strip(), start=0.0, end=round(duration, 3))
-        ]  # 退化:单窗
+        ]  # degraded: single window
     del y
     segs, _ = await asyncio.to_thread(Segmenter().segment, audio)
     results = await Scheduler().transcribe_all(segs, provider, task_id=task_id)
     out: list[Seg] = []
     for r in sorted(results, key=lambda r: r.start):
-        # VAD 段起始偏移(16k 样本位→秒)
+        # VAD segment start offset (16k sample position → seconds)
         off = r.start / ASR.SAMPLE_RATE
         if r.seg_detail:
-            # 段内句级(相对段内秒)+偏移=全局
+            # in-segment sentence level (relative seconds) + offset = global
             for st, en, text in r.seg_detail:
                 if text.strip():
                     out.append(
@@ -229,7 +229,7 @@ async def _transcribe_seg(audio: bytes, task_id: str) -> list[Seg]:
                         )
                     )
         elif r.text.strip():
-            # 段级退化:整段一窗
+            # segment-level degraded: whole segment as one window
             out.append(
                 Seg(
                     text=r.text.strip(),
@@ -250,7 +250,7 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
     tasks.set(task_id, DubStatus.RUNNING, stage_index=int(start_stage), title=title)
 
     try:
-        # 1. 下载视频，src.mp4
+        # 1. download video → src.mp4
         if start_stage <= VStage.DOWNLOAD:
             src = await fetch_source(url)
             title = src.title
@@ -265,7 +265,7 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
                 kind="video",
             )
 
-        # 2. 分离音频 audio.mp3(ASR 友好格式;m4a 实测 qwen3 不认,返回空转写)
+        # 2. extract audio → audio.mp3 (ASR-friendly; m4a rejected by qwen3 in testing, returned empty transcription)
         if start_stage <= VStage.DEMUX:
             tasks.set(task_id, stage_index=int(VStage.DEMUX))
             await align.extract_audio(tdir / "src.mp4", tdir / "audio.mp3")
@@ -277,7 +277,7 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
                 kind="video",
             )
 
-        # 3. 转写
+        # 3. transcribe
         if start_stage <= VStage.TRANSCRIBE:
             tasks.set(task_id, stage_index=int(VStage.TRANSCRIBE))
             segs = await _transcribe_seg((tdir / "audio.mp3").read_bytes(), task_id)
@@ -292,7 +292,7 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
         else:
             segs = ckp.read_segs(task_id, "transcript.json")
 
-        # 4. 翻译
+        # 4. translate
         if start_stage <= VStage.TRANSLATE:
             tasks.set(task_id, stage_index=int(VStage.TRANSLATE))
             segs = await tsl.translate_segs(segs)

@@ -13,18 +13,18 @@ class Stage(IntEnum):
 
 
 class VStage(IntEnum):
-    """视频管线"""
-    DOWNLOAD = 0  # 下载源视频
-    DEMUX = 1  # 分离音视频轨，从 src.mp4 抽出音频轨，audio.m4a
-    TRANSCRIBE = 2  # 转写，音轨进ASR，输出带句级时间戳的英文段
-    TRANSLATE = 3 # 翻译，批量翻译，每段带窗口约束
-    RESPLIT = 4  # 目标语重切+排窗，超窗长译文按句再切，子窗按字数占比分配
-    SYNTH = 5 # 合成，TTS原速逐单元合成中文语音
-    ALIGN = 6 # 时长对齐
-    MUX = 7 # 混流，中文音轨与原视频轨合成
+    """Video pipeline"""
+    DOWNLOAD = 0  # download source video
+    DEMUX = 1  # demux audio/video tracks, extract audio track from src.mp4
+    TRANSCRIBE = 2  # transcribe, audio into ASR, English segments with sentence-level timestamps out
+    TRANSLATE = 3  # translate, batch translation with per-segment window constraint
+    RESPLIT = 4  # target-language re-split + window re-assignment, over-window translations split by sentence, sub-windows by char proportion
+    SYNTH = 5  # synthesize, TTS at native speed per unit into Chinese speech
+    ALIGN = 6  # duration alignment
+    MUX = 7  # mux, Chinese audio track merged with original video track
 
 class Seg(BaseModel):
-    """带时间窗的段"""
+    """Segment with a time window"""
     text: str
     start: float
     end: float
