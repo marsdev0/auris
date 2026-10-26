@@ -5,8 +5,9 @@ package com.mars.auris.ai.dubbing.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mars.auris.ai.config.EngineProperties;
 import com.mars.auris.ai.dubbing.entity.DubbingTaskDO;
+import com.mars.auris.ai.dubbing.enums.DubbingKind;
+import com.mars.auris.ai.dubbing.enums.DubbingTaskStatus;
 import com.mars.auris.ai.dubbing.mapper.DubbingTaskMapper;
 import com.mars.auris.ai.dubbing.model.DubbingTaskResp;
 import com.mars.auris.ai.dubbing.model.engine.DubTaskDTO;
@@ -22,12 +23,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -36,7 +40,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * 配音任务编排(D6):发起幂等 + 轮询落库 + asset 流式代理。
+ * 配音任务编排(D6):发起幂等(uk_user_url_hash 唯一键兜底) + 轮询落库 + asset 流式代理。
  * 两层轮询各管一层:本服务的 getTask 只对非终态任务回源 engine 一次并落库推进度;
  * list 纯读 DB。MySQL 是状态权威源,engine 失联(404)本地标失败,不留僵尸行。
  */
@@ -68,29 +72,33 @@ public class DubbingService {
     @Autowired
     private EngineClient engineClient;
 
-    @Autowired
-    private EngineProperties properties;
-
     public SubmitTaskResp submitUrl(Long userId, String url) {
-        // 幂等:同 user 同 url 已有在途任务 → 拒重复发起,回已有任务
-        DubbingTaskDO inflight = mapper.selectOne(Wrappers.<DubbingTaskDO>lambdaQuery()
-                .eq(DubbingTaskDO::getUserId, userId)
-                .eq(DubbingTaskDO::getUrl, url)
-                .in(DubbingTaskDO::getStatus, 0, 1)
-                .last("LIMIT 1"));
-        if (inflight != null) {
-            return new SubmitTaskResp(String.valueOf(inflight.getId()));
-        }
-
         // 先落库(INIT)再调 engine:任务生命周期从"用户发起"起算,engine 受理失败也留痕
+        // url 超长已在入口 @Size(max=1024) 拒绝,此处不截断,hash 与落库值同源
+        DubbingKind kind = guessKind(url);
         DubbingTaskDO task = new DubbingTaskDO();
         task.setUserId(userId);
-        task.setUrl(url.length() > 1024 ? url.substring(0, 1024) : url);
-        task.setKind(guessKind(url));
-        task.setStatus(0);
+        task.setUrl(url);
+        task.setUrlHash(DigestUtils.md5DigestAsHex(url.getBytes(StandardCharsets.UTF_8)));
+        task.setKind(kind.getCode());
+        task.setStatus(DubbingTaskStatus.INIT.getCode());
         task.setStageIndex(0);
-        task.setStageTotal("video".equals(task.getKind()) ? 8 : 6);
-        mapper.insert(task);
+        task.setStageTotal(kind.getStageTotal());
+        try {
+            // 幂等靠唯一键兜底,不先查再插(有并发窗口):同 user 同 url 终身一行
+            mapper.insert(task);
+        } catch (DuplicateKeyException e) {
+            // 撞 uk_user_url_hash → 回查续用已有任务(在途=幂等返回;终态=同条任务复用,不新发)
+            DubbingTaskDO existed = mapper.selectOne(Wrappers.<DubbingTaskDO>lambdaQuery()
+                    .eq(DubbingTaskDO::getUserId, userId)
+                    .eq(DubbingTaskDO::getUrlHash, task.getUrlHash())
+                    .last("LIMIT 1"));
+            if (existed == null) {
+                // 撞键却查不到 = 超出模型的异常状态(同 TranscribeRecordService 口径)
+                throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
+            }
+            return new SubmitTaskResp(String.valueOf(existed.getId()));
+        }
         try {
             EngineResp<JsonNode> result = callEngine(() -> engineSubmit.post()
                     .uri(URL_DUB_SUBMIT)
@@ -101,7 +109,7 @@ public class DubbingService {
                     }));
             task.setEngineTaskId(result.getData().get("task_id").asText());
         } catch (AurisException e) {
-            task.setStatus(3);
+            task.setStatus(DubbingTaskStatus.FAILED.getCode());
             task.setErrorMsg(truncate(e.getMsg()));
             mapper.updateById(task);
             throw e;
@@ -115,13 +123,13 @@ public class DubbingService {
         if (task == null) {
             throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
         }
-        if (task.getStatus() >= 2) {
+        if (DubbingTaskStatus.isTerminal(task.getStatus())) {
             return to(task);   // 终态回源 DB,不打 engine
         }
-        if (task.getStatus() == 0 && task.getEngineTaskId() == null) {
+        if (task.getStatus() == DubbingTaskStatus.INIT.getCode() && task.getEngineTaskId() == null) {
             // 发起中断的孤儿(engine 调用后进程崩溃等):补终态,比永远 INIT 强
-            task.setStatus(3);
-            task.setErrorMsg("发起中断(engine 未受理)");
+            task.setStatus(DubbingTaskStatus.FAILED.getCode());
+            task.setErrorMsg("Aborted at submission (engine did not accept)");
             mapper.updateById(task);
             return to(task);
         }
@@ -136,24 +144,24 @@ public class DubbingService {
         } catch (AurisException e) {
             // engine TTL 过期/重启丢内存任务 → 本地标失败,别让任务永远 running
             if (Objects.equals(e.getCode(), AIErrorCode.TASK_NOT_FOUND.getCode())) {
-                task.setStatus(3);
-                task.setErrorMsg("engine 任务丢失(过期或重启)");
+                task.setStatus(DubbingTaskStatus.FAILED.getCode());
+                task.setErrorMsg("Engine task lost (expired or restarted)");
                 mapper.updateById(task);
             }
             throw e;
         }
         DubTaskDTO d = result.getData();
-        int st = d.getStatus() == null ? 1 : d.getStatus();   // 引擎异常形态兜底当 running
-        if (st == 2) {
-            task.setStatus(2);
+        int st = d.getStatus() == null ? DubbingTaskStatus.RUNNING.getCode() : d.getStatus();   // 引擎异常形态兜底当 running
+        if (st == DubbingTaskStatus.COMPLETED.getCode()) {
+            task.setStatus(DubbingTaskStatus.COMPLETED.getCode());
             task.setTitle(d.getTitle());
             task.setAudioBytes(d.getAudioBytes());
             task.setStageIndex(d.getStageTotal());
-        } else if (st == 3) {
-            task.setStatus(3);
+        } else if (st == DubbingTaskStatus.FAILED.getCode()) {
+            task.setStatus(DubbingTaskStatus.FAILED.getCode());
             task.setErrorMsg(truncate(d.getError()));
         } else {
-            task.setStatus(1);   // INIT(0)/RUNNING(1) 轮询到即开工,推进度
+            task.setStatus(DubbingTaskStatus.RUNNING.getCode());   // INIT/RUNNING 轮询到即开工,推进度
             task.setStageIndex(d.getStageIndex());
         }
         if (d.getTitle() != null && task.getTitle() == null) {
@@ -197,7 +205,7 @@ public class DubbingService {
      */
     public void streamAsset(Long userId, Long id, String kind, String range, HttpServletResponse resp) {
         DubbingTaskDO task = findByUserIdAndId(userId, id);
-        if (task == null || task.getStatus() != 2 || task.getEngineTaskId() == null) {
+        if (task == null || task.getStatus() != DubbingTaskStatus.COMPLETED.getCode() || task.getEngineTaskId() == null) {
             throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
         }
         String safeKind = switch (kind == null ? "audio" : kind) {
@@ -226,14 +234,14 @@ public class DubbingService {
                 });
     }
 
-    private static String guessKind(String url) {
+    private static DubbingKind guessKind(String url) {
         String u = url.toLowerCase(Locale.ROOT);
         if (u.contains("bilibili.com") || u.contains("b23.tv")) {
-            return "video";
+            return DubbingKind.VIDEO;
         }
         int dot = u.lastIndexOf('.');
         String ext = dot >= 0 ? u.substring(dot) : "";
-        return VIDEO_EXT.contains(ext) ? "video" : "audio";
+        return VIDEO_EXT.contains(ext) ? DubbingKind.VIDEO : DubbingKind.AUDIO;
     }
 
     private static void passHeader(HttpServletResponse resp, String name, String value) {
@@ -258,12 +266,7 @@ public class DubbingService {
         r.setTitle(t.getTitle());
         r.setUrl(t.getUrl());
         r.setKind(t.getKind());
-        r.setStatus(switch (t.getStatus()) {
-            case 2 -> "completed";
-            case 3 -> "failed";
-            case 0 -> "init";
-            default -> "running";
-        });
+        r.setStatus(DubbingTaskStatus.of(t.getStatus()).name().toLowerCase());
         r.setStageIndex(t.getStageIndex());
         r.setStageTotal(t.getStageTotal());
         r.setAudioBytes(t.getAudioBytes());

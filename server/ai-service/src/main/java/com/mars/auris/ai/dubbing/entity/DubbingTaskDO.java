@@ -27,13 +27,16 @@ public class DubbingTaskDO {
     /** 来源 URL */
     private String url;
 
+    /** url 的 md5 hex,幂等判重键(uk_user_url_hash) */
+    private String urlHash;
+
     /** 展示名(下载完成后回填) */
     private String title;
 
-    /** audio|video(D5 双形态) */
+    /** audio|video(D5 双形态),枚举 DubbingKind */
     private String kind;
 
-    /** 0-init 1-running 2-completed 3-failed */
+    /** 0-init 1-running 2-completed 3-failed,枚举 DubbingTaskStatus */
     private Integer status;
 
     /** 当前 stage(0 起) */

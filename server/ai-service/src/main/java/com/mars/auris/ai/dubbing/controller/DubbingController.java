@@ -3,21 +3,21 @@
 package com.mars.auris.ai.dubbing.controller;
 
 import com.mars.auris.ai.dubbing.model.DubbingTaskResp;
+import com.mars.auris.ai.dubbing.req.DubbingSubmitReq;
 import com.mars.auris.ai.dubbing.service.DubbingService;
 import com.mars.auris.ai.transcribe.model.PageResp;
 import com.mars.auris.ai.transcribe.model.SubmitTaskResp;
 import com.mars.auris.common.auth.UserPrincipal;
-import com.mars.auris.common.error.AurisException;
-import com.mars.auris.common.error.CommonErrorCode;
 import com.mars.auris.common.rsp.ApiResponse;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
-
-/** 配音任务 API(D6):发起/列表/状态/删除/asset 流式代理。 */
+/**
+ * 配音任务
+ */
 @RestController
 @RequestMapping("/v1/dubbing")
 public class DubbingController {
@@ -27,12 +27,8 @@ public class DubbingController {
 
     @PostMapping
     public ApiResponse<SubmitTaskResp> submit(@AuthenticationPrincipal UserPrincipal user,
-                                              @RequestBody Map<String, String> body) {
-        String url = body.get("url");
-        if (url == null || url.isBlank()) {
-            throw new AurisException(CommonErrorCode.BAD_REQUEST);
-        }
-        return ApiResponse.ok(dubbingService.submitUrl(user.userId(), url));
+                                              @Valid @RequestBody DubbingSubmitReq req) {
+        return ApiResponse.ok(dubbingService.submitUrl(user.userId(), req.getUrl()));
     }
 
     @GetMapping
@@ -55,7 +51,9 @@ public class DubbingController {
         return ApiResponse.ok();
     }
 
-    /** 产物流式代理:不走 ApiResponse 包装,响应体就是产物字节(kind=audio|video|srt)。 */
+    /**
+     * 产物流式代理:不走 ApiResponse 包装,响应体就是产物字节(kind=audio|video|srt)。
+     */
     @GetMapping("/{id}/asset")
     public void asset(@AuthenticationPrincipal UserPrincipal user,
                       @PathVariable Long id,
