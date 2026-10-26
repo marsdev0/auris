@@ -73,7 +73,7 @@ public class TranscribeRecordService {
             recordMapper.insert(item);
         } catch (DuplicateKeyException e) {
             // 不能直接返回 item.getId():插入未成功,那是未落库的假 id;查回已存在记录,续用其 recordId
-            log.error("engine_task_id 重复, userId: {}, taskId: {}", userId, engineTaskId);
+            log.error("duplicate engine_task_id, userId: {}, taskId: {}", userId, engineTaskId);
             TranscribeRecordDO recordDO = recordMapper.selectByUserIdAndEngineTaskId(userId, engineTaskId);
             if (recordDO == null) {
                 // 撞了全局唯一键但按归属查不到 = 跨用户撞 uuid,超出模型的异常状态
@@ -114,11 +114,11 @@ public class TranscribeRecordService {
         List<TranscribeRecordDO> records = recordMapper.selectTimeoutRecords(cutoff);
         for (TranscribeRecordDO r : records) {
             // 逐条走 fail():带 status=0 条件,与轮询回填天然互斥(P3 §2.4)
-            fail(r.getUserId(), r.getId(), "转写超时未完成", r.getTitle());
+            fail(r.getUserId(), r.getId(), "Transcription timed out", r.getTitle());
             eventProducer.publishTranscribeTerminal(r.getUserId(), r.getId(), r.getTitle(), "timeout");
         }
         if (!records.isEmpty()) {
-            log.warn("定时兜底:超 {}h 未完成,标 failed {} 条", transcribeProperties.getTimeoutHours(), records.size());
+            log.warn("Scheduled fallback: exceeded {}h without completion, marked {} records failed", transcribeProperties.getTimeoutHours(), records.size());
         }
         return records.size();
     }

@@ -126,7 +126,7 @@ public class RetryScanner {
                 } catch (Exception e) {
                     // 不回滚不补偿:行=3 且租约 60s,到期 reclaimExpiredLeases 收尸重排。
                     // catch 只为隔离——别让一条的 send 异常打断整批(剩余行还在 2,下轮照捞,只是慢一轮)
-                    log.error("重投发送失败,等待租约回收自愈: deliveryId={}", item.getId(), e);
+                    log.error("Retry send failed, waiting for lease recovery self-healing: deliveryId={}", item.getId(), e);
                 }
             }
         }

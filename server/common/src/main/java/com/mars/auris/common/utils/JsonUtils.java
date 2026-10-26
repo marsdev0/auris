@@ -26,7 +26,7 @@ public final class JsonUtils {
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (Exception e) {
-            log.error("序列化失败 ", e);
+            log.error("Serialization failed: ", e);
         }
         return null;
     }
@@ -35,9 +35,8 @@ public final class JsonUtils {
         try {
             return objectMapper.readValue(json, clazz);
         } catch (Exception e) {
-            log.error("反序列化失败 ", e);
+            log.error("Deserialization failed: ", e);
         }
         return null;
     }
 }
-

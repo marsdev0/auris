@@ -60,12 +60,12 @@ public class NoticeService {
     private String buildTitle(TranscribeEvent event) {
         String title = payloadTitle(event);
         String action = switch (event.getType()) {
-            case "transcribe.completed" -> "转写完成";
-            case "transcribe.failed" -> "转写失败";
-            case "transcribe.timeout" -> "转写超时";
-            default -> "转写通知";
+            case "transcribe.completed" -> "Transcription completed";
+            case "transcribe.failed" -> "Transcription failed";
+            case "transcribe.timeout" -> "Transcription timed out";
+            default -> "Transcription notice";
         };
-        return title.isEmpty() ? action : action + ":《" + title + "》";
+        return title.isEmpty() ? action : action + ": " + title;
     }
 
     /**
@@ -74,10 +74,10 @@ public class NoticeService {
     private String buildContent(TranscribeEvent event) {
         String recordId = event.getPayload() != null ? event.getPayload().getOrDefault("record_id", "") : "";
         String summary = switch (event.getType()) {
-            case "transcribe.completed" -> "转写已完成,点击查看全文";
-            case "transcribe.failed" -> "转写失败,可重新提交";
-            case "transcribe.timeout" -> "转写超时,可重新提交";
-            default -> "转写状态更新";
+            case "transcribe.completed" -> "Transcription completed, click to view the full text";
+            case "transcribe.failed" -> "Transcription failed, you can resubmit";
+            case "transcribe.timeout" -> "Transcription timed out, you can resubmit";
+            default -> "Transcription status update";
         };
         return summary + ",recordId=" + recordId;
     }

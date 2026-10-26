@@ -16,12 +16,12 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum UserErrorCode implements ErrorCode {
-    LOGIN_FAILED(401, 401_201, "用户名或密码错误"),
-    USER_PASSWORD_ERROR(401, 401_202, "密码错误"),
-    REFRESH_TOKEN_INVALID(401, 401_203, "refreshToken无效或已过期"),
-    ACCOUNT_DISABLED(403, 403_201, "账号已被禁用"),
-    USER_NOT_FOUND(404, 404_201, "用户不存在"),
-    USERNAME_ALREADY_EXISTS(409, 409_201, "用户名已存在");
+    LOGIN_FAILED(401, 401_201, "Invalid username or password"),
+    USER_PASSWORD_ERROR(401, 401_202, "Invalid password"),
+    REFRESH_TOKEN_INVALID(401, 401_203, "refreshToken is invalid or expired"),
+    ACCOUNT_DISABLED(403, 403_201, "Account has been disabled"),
+    USER_NOT_FOUND(404, 404_201, "User not found"),
+    USERNAME_ALREADY_EXISTS(409, 409_201, "Username already exists");
 
     private final Integer httpStatus;
 

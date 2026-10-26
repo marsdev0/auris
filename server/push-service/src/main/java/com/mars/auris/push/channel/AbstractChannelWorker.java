@@ -33,28 +33,28 @@ public abstract class AbstractChannelWorker {
         DeliveryTask task = JsonUtils.fromJson(msg, DeliveryTask.class);
         if (task == null || task.getDeliveryId() == null) {
             // JsonUtils 解析失败返回 null 而非抛错;消息坏了重投也不会好,ack 跳过,不阻塞分区
-            log.error("投递指令不可解析或缺 deliveryId,跳过: {}", msg);
+            log.error("Delivery command unparseable or missing deliveryId, skip: {}", msg);
             ack.acknowledge();
             return;
         }
         DeliveryDO deliveryDO = deliveryMapper.selectById(task.getDeliveryId());
         if (deliveryDO == null) {
             // 行不存在(已清理/消息不合法),同样不可恢复,跳过
-            log.error("delivery 不存在,跳过: deliveryId={}", task.getDeliveryId());
+            log.error("delivery not found, skip: deliveryId={}", task.getDeliveryId());
             ack.acknowledge();
             return;
         }
         if (deliveryDO.getStatus() != Delivery.PENDING.getCode()
                 && deliveryDO.getStatus() != Delivery.SENDING.getCode()) {
             // 只有这两种状态可以往渠道发消息
-            log.info("行已非在途,跳过: deliveryId={}, status={}",
+            log.info("Row no longer in-flight, skip: deliveryId={}, status={}",
                     deliveryDO.getId(), deliveryDO.getStatus());
             ack.acknowledge();
             return;
         }
         NoticeDO noticeDO = noticeMapper.selectById(deliveryDO.getNotificationId());
         if (noticeDO == null) {
-            log.error("notice 不存在,跳过: noticeId={}", deliveryDO.getNotificationId());
+            log.error("notice not found, skip: noticeId={}", deliveryDO.getNotificationId());
             ack.acknowledge();
             return;
         }
@@ -63,7 +63,7 @@ public abstract class AbstractChannelWorker {
             ok = sender.apply(deliveryDO, noticeDO);
         } catch (Exception e) {
             // 发送异常与返回 false 同语义:走 backoff+退避,不阻断 ack(失败语义在 DB,不在 Kafka)
-            log.error("渠道发送异常 deliveryId={}, channel={}", deliveryDO.getId(), deliveryDO.getChannel(), e);
+            log.error("Channel send failed, deliveryId={}, channel={}", deliveryDO.getId(), deliveryDO.getChannel(), e);
         }
         if (ok) {
             deliveryMapper.markSent(deliveryDO.getId());

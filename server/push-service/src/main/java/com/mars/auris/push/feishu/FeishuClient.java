@@ -41,7 +41,7 @@ public class FeishuClient {
      */
     public boolean sendCard(Card card) {
         if (!StringUtils.hasText(webhookUrl)) {
-            throw new IllegalStateException("飞书 webhook 未配置(auris.push.feishu.webhook-url)");
+            throw new IllegalStateException("Feishu webhook not configured (auris.push.feishu.webhook-url)");
         }
         FeishuMessage msg = FeishuMessage.builder()
                 .msgType("interactive")

@@ -33,7 +33,7 @@ public class EventConsumer {
         TranscribeEvent event = JsonUtils.fromJson(message, TranscribeEvent.class);
         if (event == null) {
             // 解析错误，重试1万次都失败，此时应该结束
-            log.error("事件不可解析: {}", message);
+            log.error("Event unparseable: {}", message);
             ack.acknowledge();
             return;
         }
@@ -41,7 +41,7 @@ public class EventConsumer {
         try {
             NoticeService.CreateResult createResult = noticeService.createIfAbsent(event);
             if (createResult == null) {
-                log.error("落池结果异常,不 ack 等待重投: eventId={}", event.getEventId());
+                log.error("Persist result abnormal, not acking, awaiting redelivery: eventId={}", event.getEventId());
                 return;
             }
             if (createResult.created()) {
@@ -50,7 +50,7 @@ public class EventConsumer {
             }
             routerService.route(createResult.id(), event);
         } catch (Exception e) {
-            log.error("事件处理失败(不 ack,等待重投): {}", message, e);
+            log.error("Event processing failed (no ack, awaiting redelivery): {}", message, e);
             return;
         }
         ack.acknowledge();

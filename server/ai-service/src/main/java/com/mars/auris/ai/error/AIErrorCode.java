@@ -13,11 +13,11 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum AIErrorCode implements ErrorCode {
-    AUDIO_INVALID(400, 400_101, "音频内容为空或解码失败"),
-    TASK_NOT_FOUND(404, 404_101, "任务不存在或已过期"),
-    RECORD_NOT_FOUND(404, 404_102, "记录不存在"),
-    ENGINE_ERROR(502, 502_101, "转写引擎内部错误"),
-    ENGINE_UNAVAILABLE(503, 503_101, "转写引擎暂不可用, 请稍后重试");
+    AUDIO_INVALID(400, 400_101, "Audio content is empty or failed to decode"),
+    TASK_NOT_FOUND(404, 404_101, "Task not found or expired"),
+    RECORD_NOT_FOUND(404, 404_102, "Record not found"),
+    ENGINE_ERROR(502, 502_101, "Transcription engine internal error"),
+    ENGINE_UNAVAILABLE(503, 503_101, "Transcription engine temporarily unavailable, please retry later");
 
     private final Integer httpStatus;
 

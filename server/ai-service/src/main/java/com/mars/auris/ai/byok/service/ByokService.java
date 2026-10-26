@@ -80,7 +80,7 @@ public class ByokService {
         // 1. 参数校验：openai_compat 必填 baseUrl。model/voice 无模型概念的场景允许为空
         //    (edge_tts 无 model 等),必填性由前端按 provider 元数据控制,后端不维护特例表
         if (PROVIDER_OPENAI_COMPAT.equals(req.getProvider()) && !StringUtils.hasText(req.getBaseUrl())) {
-            throw new AurisException(CommonErrorCode.BAD_REQUEST, "openai_compat 必须填写 baseUrl");
+            throw new AurisException(CommonErrorCode.BAD_REQUEST, "openai_compat requires baseUrl");
         }
 
         // 2. 组装实体;密文三件套仅换 key 时才有值
@@ -118,7 +118,7 @@ public class ByokService {
         UserModelConfigDO old = modelConfigMapper.selectByTenantUserDomain(tenantId, entity.getUserId(), entity.getDomain());
         if (old == null) {
             // 撞唯一键后却查不到旧记录,理论上仅在并发删除时出现
-            throw new AurisException(CommonErrorCode.INTERNAL_ERROR, "保存配置冲突, 请重试");
+            throw new AurisException(CommonErrorCode.INTERNAL_ERROR, "Config save conflict, please retry");
         }
 
         boolean endpointChanged = !Objects.equals(old.getProvider(), req.getProvider())
@@ -164,7 +164,7 @@ public class ByokService {
         // 1. 按 uk 查该域已存配置
         UserModelConfigDO config = modelConfigMapper.selectByTenantUserDomain(tenantId, userId, domain.getValue());
         if (config == null) {
-            throw new AurisException(CommonErrorCode.BAD_REQUEST, "该域尚未配置, 请先保存");
+            throw new AurisException(CommonErrorCode.BAD_REQUEST, "This domain has no config yet, please save it first");
         }
 
         // 2. 内存解密(免 key 配置为 null) + 组装转发体(明文仅内网一程) + 调用 engine 实测

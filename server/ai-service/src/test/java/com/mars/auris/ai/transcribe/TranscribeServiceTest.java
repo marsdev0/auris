@@ -126,14 +126,14 @@ class TranscribeServiceTest {
     void transcribeSync_success_returnsText() {
         // 准备:mock engine 正常返回
         AsrResultDTO response = new AsrResultDTO();
-        response.setText("你好世界");
+        response.setText("hello world");
         mockEngineSuccess(response);
 
         // 执行
         TranscribeResp result = transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper");
 
         // 验证:engine 的全文透传给了前端模型
-        assertEquals("你好世界", result.getText());
+        assertEquals("hello world", result.getText());
         // 验证:成功后以当前 userId 落库(P3 写入点⑤,历史记录)
         verify(recordService).saveTranscribeSyncResult(eq(USER_ID), any(EngineResp.class));
     }
@@ -203,13 +203,13 @@ class TranscribeServiceTest {
     void transcribeSync_engine404_throwsTaskNotFound() {
         HttpClientErrorException notFound = new HttpClientErrorException(
                 HttpStatus.NOT_FOUND, "Not Found", HttpHeaders.EMPTY,
-                "{\"detail\": \"任务不存在或已过期\"}".getBytes(), null);
+                "{\"detail\": \"task not found or expired\"}".getBytes(), null);
         mockEngineThrow(notFound);
 
         AurisException ex = assertThrows(AurisException.class,
                 () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(404_101, ex.getCode());
-        assertEquals("任务不存在或已过期", ex.getMsg());
+        assertEquals("task not found or expired", ex.getMsg());
     }
 
     // ========== 场景 7:engine 返回 400 → 400 AUDIO_INVALID(msg 透传) ==========
@@ -218,13 +218,13 @@ class TranscribeServiceTest {
     void transcribeSync_engine400_throwsAudioInvalid() {
         HttpClientErrorException badRequest = new HttpClientErrorException(
                 HttpStatus.BAD_REQUEST, "Bad Request", HttpHeaders.EMPTY,
-                "{\"detail\": \"音频内容为空\"}".getBytes(), null);
+                "{\"detail\": \"audio content is empty\"}".getBytes(), null);
         mockEngineThrow(badRequest);
 
         AurisException ex = assertThrows(AurisException.class,
                 () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(400_101, ex.getCode());
-        assertEquals("音频内容为空", ex.getMsg());
+        assertEquals("audio content is empty", ex.getMsg());
     }
 
     // ========== 场景 8:engine 返回 500 → 502 ENGINE_ERROR(不透传原文) ==========
@@ -233,13 +233,13 @@ class TranscribeServiceTest {
     void transcribeSync_engine500_throwsEngineError_noLeak() {
         HttpClientErrorException serverError = new HttpClientErrorException(
                 HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", HttpHeaders.EMPTY,
-                "{\"detail\": \"/usr/local/lib/python3.12/xxx 内部路径\"}".getBytes(), null);
+                "{\"detail\": \"/usr/local/lib/python3.12/xxx internal path\"}".getBytes(), null);
         mockEngineThrow(serverError);
 
         AurisException ex = assertThrows(AurisException.class,
                 () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(502_101, ex.getCode());
         // 关键:5xx 不透传 engine 原文(可能含内部路径),只给统一文案
-        assertEquals("转写引擎内部错误", ex.getMsg());
+        assertEquals("Transcription engine internal error", ex.getMsg());
     }
 }

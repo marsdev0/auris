@@ -41,10 +41,10 @@ public class EngineClient {
             result = call.get();
         } catch (ResourceAccessException e) {
             // 连不上/超时(engine 停机、网络断):快速失败,503
-            log.error("engine 不可达: {}", e.getMessage());
+            log.error("engine unreachable: {}", e.getMessage());
             throw new AurisException(AIErrorCode.ENGINE_UNAVAILABLE);
         } catch (RestClientResponseException e) {
-            log.error("engine 异常状态 {}: {}", e.getStatusCode().value(), extractDetail(e));
+            log.error("engine abnormal status {}: {}", e.getStatusCode().value(), extractDetail(e));
             throw httpErrorMapping.apply(e);
         }
         return result;

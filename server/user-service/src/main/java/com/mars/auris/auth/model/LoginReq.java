@@ -35,10 +35,10 @@ import lombok.ToString;
 @Data
 public class LoginReq {
 
-    @NotBlank(message = "用户名不能为空")
+    @NotBlank(message = "username must not be blank")
     private String username;
 
     @ToString.Exclude
-    @NotBlank(message = "密码不能为空")
+    @NotBlank(message = "password must not be blank")
     private String password;
 }
