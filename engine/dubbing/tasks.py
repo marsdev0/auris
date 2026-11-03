@@ -84,7 +84,8 @@ async def cleanup_expired() -> None:
 
 async def resume_pending() -> None:
     """启动扫描: kill -9 等中断的任务从断点续跑。单任务恢复失败只污染自身。
-    按 checkpoint.kind 分流(D5):video 用 VStage+_run_video(8 stage),audio 用 Stage+_run(6 stage)。"""
+    按 checkpoint.kind 分流(D5):video 用 VStage+_run_video(8 stage),audio 用 Stage+_run(6 stage)。
+    随后恢复已完成任务的只读条目(供 asset 下发,P12 临时修)。"""
     from engine.dubbing import checkpoint as ckp
     from engine.dubbing.pipeline import _run, _run_video
     from engine.dubbing.types import VStage
@@ -108,3 +109,32 @@ async def resume_pending() -> None:
             created_at=now, updated_at=now)
         asyncio.create_task(runner(task_id, state["url"], start_stage=start))
         logger.info(f"断点续跑 {task_id}: {kind} 从 stage {start.name} 起")
+    _restore_completed()
+
+def _restore_completed() -> None:
+    """重启恢复已完成的任务(P12 临时修):asset 路由查内存表,不重建则
+    "文件在盘、引擎失忆"一律 404。只读恢复,不重跑流水线;
+    成品文件名与 pipeline 完成态对齐——audio=narration.mp3,video=output.mp4。
+    updated_at=now 视作一次访问,TTL 从重启起重新计 24h(否则启动后首轮清理
+    就会把老任务的产物目录删掉)。"""
+    from engine.dubbing import checkpoint as ckp
+    now = time.time()
+    for task_id in ckp.scan_completed():
+        state = ckp.load_checkpoint(task_id)
+        if not state or not state.get("url"):
+            continue
+        kind = state.get("kind") or "audio"
+        tdir = ckp.task_dir(task_id)
+        artifact = tdir / ("output.mp4" if kind == "video" else "narration.mp3")
+        if not artifact.is_file():
+            logger.warning(f"completed 任务缺成品文件(跳过): {task_id} kind={kind}")
+            continue
+        total = len(VStage) if kind == "video" else len(Stage)
+        path_kw = {"video_path": str(artifact)} if kind == "video" else {"audio_path": str(artifact)}
+        _tasks[task_id] = DubbingTask(
+            task_id=task_id, status=DubStatus.COMPLETED,
+            stage_index=total, stage_total=total, kind=kind,
+            url=state["url"], title=state.get("title"),
+            audio_bytes=artifact.stat().st_size,
+            created_at=now, updated_at=now, **path_kw)
+        logger.info(f"恢复已完成任务 {task_id}: kind={kind}(只读,供 asset 下发)")
