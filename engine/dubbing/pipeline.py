@@ -207,7 +207,7 @@ async def _transcribe_seg(audio: bytes, task_id: str) -> list[Seg]:
                 for s in res.segments
                 if s.text.strip()
             ]
-        if not res.text.strip():   # 空转写 fail-fast:不产出空 Seg 空跑到成品(实测教训 2026-10-25)
+        if not res.text.strip():   # empty-transcript fail-fast: no empty Seg, no wasted run to the artifact (lesson 2026-10-25)
             raise RuntimeError("ASR 返回空文本(音频格式不支持或无语音)")
         return [
             Seg(text=res.text.strip(), start=0.0, end=round(duration, 3))

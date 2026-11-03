@@ -6,8 +6,8 @@ services:
     image: nacos/nacos-server:v2.4.3
     container_name: auris-nacos
     ports:
-      - "8848:8848"  # HTTP API（控制台、旧版客户端）
-      - "9848:9848"  # gRPC（Nacos 2.x 客户端主要通信方式，注册发现用的就是这个）
+      - "8848:8848"  # HTTP API (console, legacy clients)
+      - "9848:9848"  # gRPC (primary channel for Nacos 2.x clients, used by registration/discovery)
     environment:
       MODE: standalone
     volumes:
@@ -17,10 +17,10 @@ services:
     image: mysql:8.0
     container_name: auris-mysql
     ports:
-      - "3306:3306"  # 暴露给宿主机
+      - "3306:3306"  # exposed to the host
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: auris # 自动创建数据库
+      MYSQL_DATABASE: auris # auto-create database
     volumes:
       - mysql-data:/var/lib/mysql
 
@@ -42,17 +42,17 @@ services:
       - "9094:9094"
     environment:
       KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller           # KRaft：同时担任 Broker 和 Controller
+      KAFKA_PROCESS_ROLES: broker,controller           # KRaft: acts as both broker and controller
       KAFKA_LISTENERS: INTERNAL://kafka:29092,HOST://0.0.0.0:9092,DOCKER://kafka:9094,CONTROLLER://kafka:29093
       KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,HOST://localhost:9092,DOCKER://kafka:9094
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,HOST:PLAINTEXT,DOCKER:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093    # 单节点：只有自己一个投票者
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg               # KRaft 集群 ID（开发环境固定即可）
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1         # 单节点副本数设 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093    # single node: only one voter
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg               # KRaft cluster id (fixed for dev)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1         # replication factor 1 for single node
       KAFKA_LOG_DIRS: /var/lib/kafka/data
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: false             # 禁止自动创建 Topic
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: false             # disable auto topic creation
     volumes:
       - kafka-data:/var/lib/kafka/data
     restart: always
@@ -69,25 +69,25 @@ services:
       - kafka
     restart: always
 
-  # 对象存储(P12-D8):S3 兼容,存配音产物,asset 改预签名 URL 分发
-  # 选型 RustFS 而非 MinIO:2026-11-01 核实 MinIO 社区版仓库已归档(见 D8 方案 §3)
-  # 宿主端口避让:9000 被 kafka-ui 占 → api 映射 9100、console 映射 9101(容器内仍是 9000/9001)
+  # Object storage (P12-D8): S3-compatible, holds dubbing artifacts; asset delivery via presigned urls.
+  # RustFS over MinIO: verified on 2026-11-01 that the MinIO community repo is archived (see D8 plan section 3).
+  # Host port avoidance: 9000 taken by kafka-ui -> api mapped to 9100, console to 9101 (container still 9000/9001)
   rustfs:
     image: rustfs/rustfs:latest
     container_name: auris-rustfs
     ports:
-      - "9100:9000"  # S3 API(boto3/AWS SDK endpoint 用 http://localhost:9100,path-style)
-      - "9101:9001"  # Web 控制台
+      - "9100:9000"  # S3 API (boto3/AWS SDK endpoint http://localhost:9100, path-style)
+      - "9101:9001"  # web console
     environment:
-      RUSTFS_ACCESS_KEY: auris          # 开发凭证,与 mysql root/root 同级约定
+      RUSTFS_ACCESS_KEY: auris          # dev credentials, same convention as mysql root/root
       RUSTFS_SECRET_KEY: auris-secret
       RUSTFS_ADDRESS: ":9000"
       RUSTFS_CONSOLE_ADDRESS: ":9001"
       RUSTFS_CONSOLE_ENABLE: "true"
-      RUSTFS_OBS_LOGGER_LEVEL: error   # 日志走 stdout(docker logs);不配 LOG_DIRECTORY(非 root 写不了 /var/log)
+      RUSTFS_OBS_LOGGER_LEVEL: error   # logs to stdout (docker logs); no LOG_DIRECTORY (non-root cannot write /var/log)
     volumes:
       - rustfs-data:/data
-    command: ["/data"]   # 数据目录作位置参数(官方 docker run 同款)
+    command: ["/data"]   # data dir as positional arg (same as official docker run)
     restart: always
 
 volumes:

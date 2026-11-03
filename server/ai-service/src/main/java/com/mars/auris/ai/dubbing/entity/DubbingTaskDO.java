@@ -36,7 +36,7 @@ public class DubbingTaskDO {
     /** audio|video (D5 dual-form), see DubbingKind enum */
     private String kind;
 
-    /** 0-init 1-running 2-completed 3-failed,枚举 DubbingTaskStatus */
+    /** 0-init 1-running 2-completed 3-failed, see DubbingTaskStatus enum */
     private Integer status;
 
     /** Current stage (0-based) */

@@ -18,17 +18,17 @@ spring:
 
   servlet:
     multipart:
-      enabled: true  # 启用文件上传
-      max-file-size: 10MB  # 单个文件最大size
-      max-request-size: 10MB # 整个请求最大size
-      file-size-threshold: 0 # 直接落临时文件，不占堆，转发时流式读盘
+      enabled: true  # enable multipart upload
+      max-file-size: 10MB  # max size per file
+      max-request-size: 10MB # max size per request
+      file-size-threshold: 0 # spill to temp file immediately, no heap, streamed on forward
 
   kafka:
-    bootstrap-servers: localhost:9092   # HOST listener(compose 的 INTERNAL 是容器网用)
+    bootstrap-servers: localhost:9092   # HOST listener (compose INTERNAL is for the docker network)
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      acks: all                        # 事件不丢:全部 ISR 确认(单副本下即落盘)
+      acks: all                        # no event loss: all-ISR ack (on single replica = on disk)
 
 engine:
   base-url: http://127.0.0.1:18000
@@ -40,14 +40,14 @@ mybatis-plus:
   global-config:
     db-config:
       id-type: assign_id
-      # 不配 logic-delete:硬删(P3 §2.8),实体无 is_deleted 字段,配置是错误信号已摘除
+      # no logic-delete config: hard delete (P3 section 2.8), entity has no is_deleted column; the config was a wrong signal and got removed
 
 auris:
   jwt:
     access-token-secret: ${JWT_ACCESS_SECRET:auris-access-secret-key-2026-change-in-prod}
     issuer: auris
   byok:
-    # AES-256 主密钥(Base64 的 32 字节),生产必须由 BYOK_MASTER_KEY 注入,此处仅开发默认值
+    # AES-256 master key (32 bytes base64); prod must inject BYOK_MASTER_KEY, this is a dev-only default
     master-key: ${BYOK_MASTER_KEY:cyOkERCuEofTKaERZwLhAueq3dIjgccZ6nAfHlEHIvI=}
     key-version: 1
   storage:

@@ -1,38 +1,39 @@
 /**
- * 配音任务台服务层 —— 真实接口(P12-D6,经 gateway 归 ai-service)。
+ * Dubbing task-board service layer — real endpoints (P12-D6/D8, routed to ai-service via gateway).
  *
- *   POST   /v1/dubbing            发起(body 带 url;幂等:同 url 在途回已有)
- *   GET    /v1/dubbing            列表(分页,纯读 DB)
- *   GET    /v1/dubbing/{id}       状态(running 时轮询本接口;Java 非终态才回源 engine)
- *   DELETE /v1/dubbing/{id}       删除
- *   GET    /v1/dubbing/{id}/asset?kind=audio|video|srt 产物流式代理(Range 透传)
+ *   POST   /v1/dubbing                          submit (body carries url; idempotent: in-flight url returns existing)
+ *   GET    /v1/dubbing                          list (paginated, pure DB read)
+ *   GET    /v1/dubbing/{id}                     status (poll while running; Java calls engine only for non-terminal)
+ *   DELETE /v1/dubbing/{id}                     delete
+ *   GET    /v1/dubbing/{id}/asset?kind=...      legacy streaming proxy (Range passthrough, fallback)
+ *   GET    /v1/dubbing/{id}/asset-url?kind=...  presigned url issuing (D8)
  */
 
 import { request, type PageResp } from './api'
 
-// ---------- 类型(对齐后端 DubbingTaskResp) ----------
+// ---------- types (aligned with backend DubbingTaskResp) ----------
 
-// init=已受理未开工,渲染与 running 同(进行中判断:['init','running'].includes(status))
+// init = accepted but not started, rendered same as running (in-flight check: ['init','running'].includes(status))
 export type DubbingStatus = 'init' | 'running' | 'completed' | 'failed'
 export type DubKind = 'audio' | 'video'
 
 export interface DubbingTask {
-  /** 一律 String(P3 铁律:雪花 id 超 JS 2^53) */
+  /** always String (P3 rule: snowflake ids exceed JS 2^53) */
   id: string
   title: string | null
   url: string
   kind: DubKind
   status: DubbingStatus
-  /** 0..stageTotal-1;进行中表示"正在执行第 stageIndex+1 步" */
+  /** 0..stageTotal-1; in-flight means "executing step stageIndex+1" */
   stageIndex: number
   stageTotal: number
   audioBytes: number | null
   error: string | null
-  /** UTC 无后缀(全链路 UTC 纪律,展示用 fmtUtc) */
+  /** UTC without suffix (full-chain UTC discipline, rendered via fmtUtc) */
   createdAt: string
 }
 
-// ---------- 双形态 stage 标签(音频六步/视频八步,渲染按 kind 取集合) ----------
+// ---------- dual-form stage labels (audio 6 steps / video 8 steps, picked by kind) ----------
 
 export const dub_stages = {
   audio: [
@@ -59,12 +60,12 @@ export function stagesFor(kind: DubKind) {
   return dub_stages[kind] ?? dub_stages.audio
 }
 
-// ---------- 接口 ----------
+// ---------- api ----------
 
 export async function listDubbing(page = 1, size = 20): Promise<DubbingTask[]> {
   const data = await request<PageResp<DubbingTask>>(`/v1/dubbing?page=${page}&size=${size}`)
-  return data.records   // 注意:后端 PageResp 序列化为 records(与 transcribe 同款),
-                        // 取错字段会让 tasks=undefined → 页面渲染崩(实测 2026-10-25)
+  return data.records   // note: backend PageResp serializes as records (same as transcribe);
+                        // reading the wrong field leaves tasks=undefined and crashes the page (2026-10-25)
 }
 
 export async function getDubbing(id: string): Promise<DubbingTask> {
@@ -84,12 +85,14 @@ export async function deleteDubbing(id: string): Promise<void> {
   await request<void>(`/v1/dubbing/${id}`, { method: 'DELETE' })
 }
 
-// D8:改走 asset-url 签发预签名直链——JS 只拿凭证不再搬运字节,
-// <video>/<audio> 直连对象存储,原生流式+自动 Range(告别 D6 全量 blob 的干等与内存驻留)。
-// 每次点击现签(服务端微秒级本地计算),不做缓存——天然规避短时效 URL 的缓存过期问题。
+// D8: switch to asset-url presigned links — JS only fetches the credential, no longer moves bytes.
+// <video>/<audio> hit object storage directly: native streaming + automatic Range
+// (goodbye D6 full-blob waiting and memory footprint).
+// Sign fresh on every click (microsecond local computation server-side), no cache —
+// which also sidesteps stale short-lived urls.
 export interface AssetUrlResp {
   url: string
-  /** 凭证有效期(秒);过期重签即可 */
+  /** credential ttl in seconds; re-sign on expiry */
   expiresIn: number
 }
 
@@ -98,7 +101,7 @@ export async function fetchAssetUrl(id: string, kind: 'audio' | 'video' | 'srt' 
   return data.url
 }
 
-/** 字幕下载(srt 预签名 URL → a 直下;跨域时 download 属性被忽略,开新页兜底;视频任务才有) */
+/** Subtitle download (presigned srt url via <a>; cross-origin ignores the download attr, new tab as fallback; video tasks only) */
 export async function downloadSubtitle(id: string, title: string): Promise<void> {
   const url = await fetchAssetUrl(id, 'srt')
   const a = document.createElement('a')

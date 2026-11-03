@@ -12,12 +12,12 @@ import lombok.Getter;
 public enum DubbingKind {
 
     /**
-     * 音频链路:下载→分离→ASR→翻译→TTS→混流,共 6 stage
+     * Audio pipeline: download -> demux -> ASR -> translate -> TTS -> mux, 6 stages in total
      */
     AUDIO("audio", 6),
 
     /**
-     * 视频链路:多下视频流/画面对齐等,共 8 stage
+     * Video pipeline: extra video download / alignment etc., 8 stages in total
      */
     VIDEO("video", 8);
 

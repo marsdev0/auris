@@ -24,9 +24,9 @@ public interface TranscribeConst {
     String ENGINE_STATUS_FAILED = "failed";
 
     /** Record submission entry (transcribe_record.source; the primary semantics is the entry point, sync/async is a per-entry mode) */
-    int SOURCE_UPLOAD_ASYNC = 0;   // 文件上传 → 异步任务
+    int SOURCE_UPLOAD_ASYNC = 0;   // file upload -> async task
 
-    int SOURCE_UPLOAD_SYNC = 1;    // 文件上传 → 同步直返
+    int SOURCE_UPLOAD_SYNC = 1;    // file upload -> sync direct return
 
-    int SOURCE_URL = 2;            // URL 链接 → 异步任务
+    int SOURCE_URL = 2;            // url link -> async task
 }

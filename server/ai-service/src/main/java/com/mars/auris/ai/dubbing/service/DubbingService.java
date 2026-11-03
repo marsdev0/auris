@@ -97,16 +97,16 @@ public class DubbingService {
         task.setStageIndex(0);
         task.setStageTotal(kind.getStageTotal());
         try {
-            // 幂等靠唯一键兜底,不先查再插(有并发窗口):同 user 同 url 终身一行
+            // Idempotency by unique-key fallback, no check-then-insert (concurrency window): one row per user+url for life
             mapper.insert(task);
         } catch (DuplicateKeyException e) {
-            // 撞 uk_user_url_hash → 回查续用已有任务(在途=幂等返回;终态=同条任务复用,不新发)
+            // uk_user_url_hash hit -> query back and reuse the existing row (in-flight = idempotent return; terminal = reuse, no resubmit)
             DubbingTaskDO existed = mapper.selectOne(Wrappers.<DubbingTaskDO>lambdaQuery()
                     .eq(DubbingTaskDO::getUserId, userId)
                     .eq(DubbingTaskDO::getUrlHash, task.getUrlHash())
                     .last("LIMIT 1"));
             if (existed == null) {
-                // 撞键却查不到 = 超出模型的异常状态(同 TranscribeRecordService 口径)
+                // key hit but row missing = out-of-model anomaly (same policy as TranscribeRecordService)
                 throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
             }
             return new SubmitTaskResp(String.valueOf(existed.getId()));
@@ -136,7 +136,7 @@ public class DubbingService {
             throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
         }
         if (DubbingTaskStatus.isTerminal(task.getStatus())) {
-            return to(task);   // 终态回源 DB,不打 engine
+            return to(task);   // terminal states served from DB, no engine call
         }
         if (task.getStatus() == DubbingTaskStatus.INIT.getCode() && task.getEngineTaskId() == null) {
             // Orphan from an interrupted submit (process crash after the engine call etc.): backfill terminal state, better than forever-INIT
@@ -163,7 +163,7 @@ public class DubbingService {
             throw e;
         }
         DubTaskDTO d = result.getData();
-        int st = d.getStatus() == null ? DubbingTaskStatus.RUNNING.getCode() : d.getStatus();   // 引擎异常形态兜底当 running
+        int st = d.getStatus() == null ? DubbingTaskStatus.RUNNING.getCode() : d.getStatus();   // engine oddity fallback: treat as running
         if (st == DubbingTaskStatus.COMPLETED.getCode()) {
             task.setStatus(DubbingTaskStatus.COMPLETED.getCode());
             task.setTitle(d.getTitle());
@@ -173,14 +173,14 @@ public class DubbingService {
             task.setStatus(DubbingTaskStatus.FAILED.getCode());
             task.setErrorMsg(truncate(d.getError()));
         } else {
-            task.setStatus(DubbingTaskStatus.RUNNING.getCode());   // INIT/RUNNING 轮询到即开工,推进度
+            task.setStatus(DubbingTaskStatus.RUNNING.getCode());   // INIT/RUNNING: mark running on first poll, advance stage
             task.setStageIndex(d.getStageIndex());
         }
         if (d.getTitle() != null && task.getTitle() == null) {
-            task.setTitle(d.getTitle());   // title 下载完就有,提前回填
+            task.setTitle(d.getTitle());   // title exists once download finishes, backfill early
         }
         if (d.getStageTotal() != null && d.getStageTotal() > 0) {
-            task.setStageTotal(d.getStageTotal());   // stage_total 以 engine 为准(校准粗判)
+            task.setStageTotal(d.getStageTotal());   // stage_total defers to engine (corrects the coarse guess)
         }
         if (d.getKind() != null && !d.getKind().isBlank()) {
             task.setKind(d.getKind());
@@ -248,10 +248,12 @@ public class DubbingService {
 
 
     /**
-     * 预签名 URL 签发:Java 从"流字节"变"发凭证",浏览器直连对象存储。
-     * 纯本地计算(SigV4),零网络调用;key 约定式拼出
-     * kind 按任务形态白名单:presign 不校验对象存在性,fallback 会签出打开必 403 的
-     * URL——错误在签发时暴露(404),而非播放时(与 streamAsset 的 fallback 语义刻意不同)。
+     * Presigned url issuing (D8): Java goes from "proxying bytes" to "issuing credentials";
+     * the browser connects to object storage directly. Pure local computation (SigV4),
+     * zero network calls; the key is derived by convention.
+     * kind whitelist by task form: presign cannot verify object existence, and a fallback
+     * would issue a URL that always 403s on open — surface the error at signing time (404),
+     * not playback (deliberately different from streamAsset's fallback semantics).
      */
     public AssetUrlResp signAsset(Long userId, Long id, String kind) {
         DubbingTaskDO task = findByUserIdAndId(userId, id);
@@ -259,7 +261,7 @@ public class DubbingService {
             throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
         }
 
-        // kind 按任务形态白名单映射文件名:video 任务有 output.mp4/dub.srt,audio 任务只有 narration.mp3
+        // map kind to artifact name by task form: video tasks have output.mp4/dub.srt, audio only narration.mp3
         boolean video = DubbingKind.VIDEO.getCode().equals(task.getKind());
         String name = null;
         if (video) {
@@ -272,7 +274,7 @@ public class DubbingService {
             name = "narration.mp3";
         }
         if (name == null) {
-            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);   // 形态不匹配,404 不泄露存在性
+            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);   // form mismatch, 404 without leaking existence
         }
 
         String key = "dubbing/" + task.getEngineTaskId() + "/" + name;

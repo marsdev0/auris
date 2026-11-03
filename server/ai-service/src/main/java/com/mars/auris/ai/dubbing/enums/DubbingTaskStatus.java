@@ -12,22 +12,22 @@ import lombok.Getter;
 public enum DubbingTaskStatus {
 
     /**
-     * 已发起,engine 未受理或刚受理
+     * submitted, engine not yet accepted or just accepted
      */
     INIT(0),
 
     /**
-     * 执行中(流水线推进,轮询拉进度)
+     * running (pipeline advancing, progress pulled by polling)
      */
     RUNNING(1),
 
     /**
-     * 成功,产物就绪可拉流
+     * succeeded, artifacts ready to stream
      */
     COMPLETED(2),
 
     /**
-     * 失败,error_msg 留痕
+     * failed, error_msg kept for trace
      */
     FAILED(3);
 

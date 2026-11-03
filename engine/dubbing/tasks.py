@@ -112,11 +112,11 @@ async def resume_pending() -> None:
     _restore_completed()
 
 def _restore_completed() -> None:
-    """重启恢复已完成的任务(P12 临时修):asset 路由查内存表,不重建则
-    "文件在盘、引擎失忆"一律 404。只读恢复,不重跑流水线;
-    成品文件名与 pipeline 完成态对齐——audio=narration.mp3,video=output.mp4。
-    updated_at=now 视作一次访问,TTL 从重启起重新计 24h(否则启动后首轮清理
-    就会把老任务的产物目录删掉)。"""
+    """Rebuild completed tasks after restart (P12 hotfix): the asset route only reads the in-memory
+    registry; without rebuilding, "files on disk but engine amnesia" answers 404 for everything.
+    Read-only recovery, no pipeline re-run; artifact names align with the pipeline final state
+    (audio=narration.mp3, video=output.mp4). updated_at=now counts as one access so the TTL
+    restarts from boot (otherwise the first cleanup round would delete old artifact dirs)."""
     from engine.dubbing import checkpoint as ckp
     now = time.time()
     for task_id in ckp.scan_completed():

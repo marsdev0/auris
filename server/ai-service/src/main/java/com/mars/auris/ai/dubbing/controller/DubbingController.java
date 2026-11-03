@@ -63,8 +63,8 @@ public class DubbingController {
     }
 
     /**
-     * 产物预签名
-     * URL 签发, Java从"流字节"变"发凭证", 浏览器直连对象存储
+     * Presigned url issuing (D8): Java goes from "proxying bytes" to "issuing credentials";
+     * the browser connects to object storage directly.
      */
     @GetMapping("/{id}/asset-url")
     public ApiResponse<AssetUrlResp> assetUrl(@AuthenticationPrincipal UserPrincipal user,

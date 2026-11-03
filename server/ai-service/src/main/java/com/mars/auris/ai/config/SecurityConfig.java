@@ -29,8 +29,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http.csrf(AbstractHttpConfigurer::disable)           // 前后端分离，不需要 CSRF
-                .sessionManagement(sm -> sm.sessionCreationPolicy(STATELESS))   // 无状态，不用 Session
+        http.csrf(AbstractHttpConfigurer::disable)           // SPA frontend, CSRF not needed
+                .sessionManagement(sm -> sm.sessionCreationPolicy(STATELESS))   // stateless, no session
                 .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
                 // jwtAuthFilter runs after username/password authentication
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)

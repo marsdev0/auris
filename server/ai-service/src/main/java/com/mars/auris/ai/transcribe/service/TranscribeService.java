@@ -103,7 +103,7 @@ public class TranscribeService {
         EngineResp<String> result = callEngine(() -> engineSubmit.post()
                 .uri(TranscribeConst.URL_ASR_TASK_START_URL)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("url", url))                 // provider 用默认,不透出
+                .body(Map.of("url", url))                 // default provider, not exposed
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {
                 }));

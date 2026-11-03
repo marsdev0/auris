@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * 配音任务台(P12-D6)—— 发起 + 任务列表一页流,真实接口版(services/dubbing.ts)。
+ * Dubbing task board (P12-D6/D8) — submit + task list in one page, real api (services/dubbing.ts).
  *
- * 双形态:kind=video(八步,<video> 播放 mp4 + srt 字幕下载)/ audio(六步,<audio> 播放)。
- * 进行中任务的进度由页面 3s 心跳轮询 GET /v1/dubbing 驱动(Java 非终态才回源 engine)。
+ * Dual form: kind=video (8 steps, <video> plays mp4 + srt download) / audio (6 steps, <audio> playback).
+ * In-flight progress driven by a 3s heartbeat polling GET /v1/dubbing (Java calls engine only for non-terminal).
  */
 import { ref, onMounted, onUnmounted } from 'vue'
 import {
@@ -17,16 +17,16 @@ const emit = defineEmits<{ back: []; toModels: [] }>()
 const tasks = ref<DubbingTask[]>([])
 const url = ref('')
 const submitting = ref(false)
-/** 播放弹层:{ task, src(blob objectURL) } */
+/** play overlay: { task, src (presigned url) } */
 const playing = ref<{ task: DubbingTask; src: string } | null>(null)
-/** 页内轻提示 */
+/** lightweight in-page toast */
 const toast = ref('')
 let toastTimer: number | undefined
 let tickTimer: number | undefined
 
 async function refresh() {
-  // 先拉一次列表,再对进行中任务逐个调详情——getTask 才会触发 Java 回源 engine
-  // 推进 DB(纯 list 不推进,任务会永远停在 init;实测教训 2026-10-25)
+  // list first, then getTask per in-flight row — only getTask makes Java call engine and
+  // advance the DB (a plain list never does; tasks stuck in init forever, lesson 2026-10-25)
   tasks.value = await listDubbing()
   const inflight = tasks.value.filter(t => inFlight(t))
   if (inflight.length > 0) {
@@ -98,7 +98,7 @@ async function openPlaying(t: DubbingTask) {
 
 async function downloadAsset(t: DubbingTask) {
   try {
-    // 预签名直链:跨域下 download 属性会被浏览器忽略,开新页兜底(存储侧非可渲染类型会直接触发下载)
+    // presigned link: browsers ignore the download attribute cross-origin, new tab as fallback (non-renderable types download directly)
     const src = await fetchAssetUrl(t.id, t.kind === 'video' ? 'video' : 'audio')
     const a = document.createElement('a')
     a.href = src
@@ -135,7 +135,7 @@ function fmtBytes(n: number | null): string {
 
 <template>
   <div class="max-w-3xl mx-auto space-y-5">
-    <!-- 发起区 -->
+    <!-- submit area -->
     <div class="bg-white rounded-xl shadow p-5 flex gap-3">
       <input
         v-model="url"
@@ -152,7 +152,7 @@ function fmtBytes(n: number | null): string {
 
     <p v-if="toast" class="text-xs text-gray-500 -my-2">{{ toast }}</p>
 
-    <!-- 任务卡片流 -->
+    <!-- task card stream -->
     <div v-for="t in tasks" :key="t.id" class="bg-white rounded-xl shadow p-5 space-y-3">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
@@ -169,7 +169,7 @@ function fmtBytes(n: number | null): string {
         </span>
       </div>
 
-      <!-- 进行中:进度条 + 流水灯(按 kind 取步数,上界用 stageTotal) -->
+      <!-- in-flight: progress bar + stage lights (steps by kind, capped by stageTotal) -->
       <template v-if="inFlight(t)">
         <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div class="h-full bg-blue-500 rounded-full transition-all duration-1000"
@@ -186,7 +186,7 @@ function fmtBytes(n: number | null): string {
         <p class="text-xs text-gray-400">中断自动断点续跑(引擎 stage 级检查点)</p>
       </template>
 
-      <!-- 失败:错误 + 重新发起 -->
+      <!-- failed: error + resubmit -->
       <template v-else-if="t.status === 'failed'">
         <p class="text-xs text-red-500 bg-red-50 rounded px-3 py-2">{{ t.error }}</p>
         <div class="flex gap-3">
@@ -195,7 +195,7 @@ function fmtBytes(n: number | null): string {
         </div>
       </template>
 
-      <!-- 已完成:播放/下载/字幕 -->
+      <!-- completed: play/download/subtitle -->
       <template v-else>
         <div class="flex items-center gap-3">
           <button
@@ -215,7 +215,7 @@ function fmtBytes(n: number | null): string {
       还没有配音任务——贴一个外语视频/播客链接试试
     </p>
 
-    <!-- 播放弹层:按 kind 渲染 video/audio -->
+    <!-- play overlay: video/audio by kind -->
     <div v-if="playing" class="fixed inset-0 bg-black/60 z-20 flex items-center justify-center px-4" @click.self="playing = null">
       <div class="bg-white rounded-xl shadow-xl p-4 w-full max-w-2xl space-y-3">
         <div class="flex items-center justify-between">
