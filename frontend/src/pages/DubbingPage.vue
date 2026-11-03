@@ -98,9 +98,11 @@ async function openPlaying(t: DubbingTask) {
 
 async function downloadAsset(t: DubbingTask) {
   try {
+    // 预签名直链:跨域下 download 属性会被浏览器忽略,开新页兜底(存储侧非可渲染类型会直接触发下载)
     const src = await fetchAssetUrl(t.id, t.kind === 'video' ? 'video' : 'audio')
     const a = document.createElement('a')
     a.href = src
+    a.target = '_blank'
     a.download = `${(t.title || 'dubbing').slice(0, 60)}.${t.kind === 'video' ? 'mp4' : 'mp3'}`
     a.click()
   } catch (e) {

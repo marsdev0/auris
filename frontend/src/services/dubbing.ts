@@ -8,7 +8,7 @@
  *   GET    /v1/dubbing/{id}/asset?kind=audio|video|srt 产物流式代理(Range 透传)
  */
 
-import { request, getToken, type PageResp } from './api'
+import { request, type PageResp } from './api'
 
 // ---------- 类型(对齐后端 DubbingTaskResp) ----------
 
@@ -84,29 +84,26 @@ export async function deleteDubbing(id: string): Promise<void> {
   await request<void>(`/v1/dubbing/${id}`, { method: 'DELETE' })
 }
 
-// <audio>/<video> 标签带不了 Authorization 头,fetch 全量拿 blob 再 objectURL
-// (本地 seek 可拖;Range 透传仍实现——浏览器直连/下载场景受益)
-const assetUrlCache = new Map<string, string>()
-
-export async function fetchAssetUrl(id: string, kind: 'audio' | 'video' | 'srt' = 'audio'): Promise<string> {
-  const key = `${id}:${kind}`
-  const cached = assetUrlCache.get(key)
-  if (cached) return cached
-  const headers: Record<string, string> = {}
-  const token = getToken()
-  if (token) headers.Authorization = `Bearer ${token}`
-  const resp = await fetch(`/v1/dubbing/${id}/asset?kind=${kind}`, { headers })
-  if (!resp.ok) throw new Error(`asset HTTP ${resp.status}`)
-  const url = URL.createObjectURL(await resp.blob())
-  assetUrlCache.set(key, url)
-  return url
+// D8:改走 asset-url 签发预签名直链——JS 只拿凭证不再搬运字节,
+// <video>/<audio> 直连对象存储,原生流式+自动 Range(告别 D6 全量 blob 的干等与内存驻留)。
+// 每次点击现签(服务端微秒级本地计算),不做缓存——天然规避短时效 URL 的缓存过期问题。
+export interface AssetUrlResp {
+  url: string
+  /** 凭证有效期(秒);过期重签即可 */
+  expiresIn: number
 }
 
-/** 字幕下载(srt blob → a[download] 触发;视频任务才有) */
+export async function fetchAssetUrl(id: string, kind: 'audio' | 'video' | 'srt' = 'audio'): Promise<string> {
+  const data = await request<AssetUrlResp>(`/v1/dubbing/${id}/asset-url?kind=${kind}`)
+  return data.url
+}
+
+/** 字幕下载(srt 预签名 URL → a 直下;跨域时 download 属性被忽略,开新页兜底;视频任务才有) */
 export async function downloadSubtitle(id: string, title: string): Promise<void> {
   const url = await fetchAssetUrl(id, 'srt')
   const a = document.createElement('a')
   a.href = url
+  a.target = '_blank'
   a.download = `${(title || 'dubbing').slice(0, 60)}.srt`
   a.click()
 }
