@@ -11,7 +11,8 @@
 - 🔗 **多来源接入** — 文件上传同步直返；URL 异步任务，支持 B 站视频、小宇宙播客、音视频直链自动抓取
 - ⚡ **流式识别** — WebSocket 实时转写，边说边出
 - 🧠 **LLM 引擎侧客户端** — 批量翻译（聚批 + 编号对齐 + 容错降级链）、调用级重试与确定性错误甄别、json_mode 兼容降级
-- 🧱 **微服务后端** — Spring Boot 3：gateway（路由）/ user（JWT 鉴权）/ ai（转写与配音编排、幂等、asset 流式代理）/ push（通知投递）
+- 🧱 **微服务后端** — Spring Boot 3：gateway（路由）/ user（JWT 鉴权）/ ai（转写与配音编排、幂等、预签名 URL 签发）/ push（通知投递）
+- 📦 **对象存储与预签名分发（P12-D8）** — 配音产物存于 RustFS（S3 兼容）；后端签发短时效预签名 URL，浏览器带 Range 直连拉流——秒起播、engine 重启不丢产物、带宽三跳变一跳
 - 📨 **事件驱动通知** — Kafka 两级 topic 架构，站内信 / 邮件 / 飞书多渠道投递，两级幂等 + DB 驱动重试 + DLQ 死信队列
 - 🖥️ **现代 Web 前端** — Vue 3 + TypeScript + Tailwind CSS，登录、转写、配音任务台（双形态进度/播放/字幕下载）、历史、通知一站直达
 
@@ -22,7 +23,7 @@
 | `engine/` | Python · FastAPI | AI 引擎：ASR 转写（同步/异步/流式）、VAD 分段、长音频分段管线、多来源抓取、LLM 客户端、TTS（edge-tts）、dubbing 配音管线（六/八 stage、checkpoint 断点续跑、时长对齐、ffmpeg 混流） |
 | `server/` | Java · Spring Boot 3 | 业务微服务：gateway 路由（Nacos 动态配置）、user 鉴权、ai 转写/配音编排（任务表、幂等、两层轮询、asset 代理）、push 通知投递、common 公共库 |
 | `frontend/` | Vue 3 · TypeScript · Tailwind CSS | Web 端：转写工作台、配音任务台（音频/视频双形态）、实时识别、历史记录、站内通知、模型配置（BYOK） |
-| 基础设施 | MySQL · Redis · Kafka · Nacos | 持久化（任务状态权威源）、缓存/限流、事件流、服务注册与配置 |
+| 基础设施 | MySQL · Redis · Kafka · Nacos · RustFS | 持久化（任务状态权威源）、缓存/限流、事件流、服务注册与配置、S3 兼容产物存储 |
 
 ## 里程碑
 
@@ -37,16 +38,28 @@
 | P8 | 调度闸门（PriorityGate：优先级/预留/aging，实测校准） | ✅ |
 | P10 | 压测与容量验证（ASR 并发参数校准） | ✅ |
 | P12 | 视频中文配音域（TTS→播报→翻译→视频对齐混流→Java 薄层+前端，六站交付） | ✅ |
+| P12-D8 | 产物对象存储与预签名分发（RustFS；浏览器直连拉流，engine 重启产物不丢） | ✅ |
 
-后续规划：P7 摘要域、P9 配额与多租户、P11 云端生产化、产物对象存储（预签名 URL）、双语字幕、完成事件推送。方案设计见 [docs/design](docs/design/README.md)。
+后续规划：P7 摘要域、P9 配额与多租户、P11 云端生产化、双语字幕、完成事件推送。方案设计见 [docs/design](docs/design/README.md)。
 
 ## 快速开始
 
+环境要求：Docker（OrbStack / Docker Desktop）、JDK 21、Node.js 18+、Python 3.12+（配 [uv](https://docs.astral.sh/uv/)）。
+
 ```bash
-make infra-up        # MySQL/Redis/Kafka/Nacos
-make run-engine      # :18000
-make run-gateway & make run-ai & make run-user   # :8080/:8081/:8082
-make run-frontend    # :5173
+# 1. 环境变量：复制模板并填入你的 LLM key
+#    （唯一付费依赖——配音翻译用；ASR/TTS 默认本地免费）
+cp .env.example .env       # 编辑 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
+
+# 2. 基础设施：MySQL / Redis / Kafka / Nacos / RustFS（S3 兼容对象存储）
+make infra-up
+
+# 3. 服务
+make run-engine                                            # :18000 AI 引擎
+make run-gateway & make run-ai & make run-user             # :8080/:8081/:8082
+make run-frontend                                          # :5173 前端
+
+# 4. 打开 http://localhost:5173 —— 注册账号，贴一个 B 站视频链接，发起配音任务
 ```
 
 > 使用 AI 编码助手（pi / Claude Code 等）？仓库内置 `.agents/skills/auris-dev` 开发环境编排 skill——对 agent 说「启动 auris」即可一键起全套（含健康判定与故障处置）。
