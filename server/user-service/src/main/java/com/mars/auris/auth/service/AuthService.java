@@ -1,3 +1,5 @@
+// Copyright (c) 2026 marsdev0
+// Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.auth.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -72,11 +74,11 @@ public class AuthService {
         query.eq(UserDO::getUsername, req.getUsername());
         UserDO userDO = userMapper.selectOne(query);
         if (userDO == null) {
-            log.warn("登录失败, 用户不存在, username: {}", req.getUsername());
+            log.warn("Login failed, user not found, username: {}", req.getUsername());
             throw new AurisException(UserErrorCode.LOGIN_FAILED);
         }
         if (!passwordEncoder.matches(req.getPassword(), userDO.getPassword())) {
-            log.warn("登录失败, 密码错误, username: {}", req.getUsername());
+            log.warn("Login failed, wrong password, username: {}", req.getUsername());
             throw new AurisException(UserErrorCode.LOGIN_FAILED);
         }
         if (!userDO.enable()) {

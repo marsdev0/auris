@@ -1,3 +1,5 @@
+// Copyright (c) 2026 marsdev0
+// Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.gateway.config;
 
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 marsdev0
+// Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.ai.transcribe.producer;
 
 import com.mars.auris.common.utils.JsonUtils;
@@ -38,7 +40,7 @@ public class TranscribeEventProducer {
         try {
             kafkaTemplate.send(EVENT_AURIS, eventId, JsonUtils.toJson(body));
         } catch (Exception e) {
-            log.error("事件发布失败(通知将缺席): recordId={}, type=transcribe.{}", recordId, status, e);
+            log.error("Event publish failed (notification will be missing): recordId={}, type=transcribe.{}", recordId, status, e);
         }
     }
 }

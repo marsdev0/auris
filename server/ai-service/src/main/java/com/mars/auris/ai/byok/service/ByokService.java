@@ -1,3 +1,5 @@
+// Copyright (c) 2026 marsdev0
+// Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.ai.byok.service;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -78,7 +80,7 @@ public class ByokService {
         // 1. Param validation: openai_compat requires baseUrl. model/voice allowed empty for model-less scenarios
         //    (edge_tts has no model etc.); requiredness is controlled by the frontend per provider metadata, the backend keeps no special-case table
         if (PROVIDER_OPENAI_COMPAT.equals(req.getProvider()) && !StringUtils.hasText(req.getBaseUrl())) {
-            throw new AurisException(CommonErrorCode.BAD_REQUEST, "openai_compat 必须填写 baseUrl");
+            throw new AurisException(CommonErrorCode.BAD_REQUEST, "openai_compat requires baseUrl");
         }
 
         // 2. Assemble entity; the ciphertext trio is set only when the key changes
@@ -116,7 +118,7 @@ public class ByokService {
         UserModelConfigDO old = modelConfigMapper.selectByTenantUserDomain(tenantId, entity.getUserId(), entity.getDomain());
         if (old == null) {
             // Hit the unique key but the old record is gone — only possible under concurrent deletion
-            throw new AurisException(CommonErrorCode.INTERNAL_ERROR, "保存配置冲突, 请重试");
+            throw new AurisException(CommonErrorCode.INTERNAL_ERROR, "Config save conflict, please retry");
         }
 
         boolean endpointChanged = !Objects.equals(old.getProvider(), req.getProvider())
@@ -162,7 +164,7 @@ public class ByokService {
         // 1. Query the stored config for this domain by uk
         UserModelConfigDO config = modelConfigMapper.selectByTenantUserDomain(tenantId, userId, domain.getValue());
         if (config == null) {
-            throw new AurisException(CommonErrorCode.BAD_REQUEST, "该域尚未配置, 请先保存");
+            throw new AurisException(CommonErrorCode.BAD_REQUEST, "This domain has no config yet, please save it first");
         }
 
         // 2. Decrypt in memory (null for key-free) + assemble forwarding body (plaintext only on the inner hop) + call engine for a live check

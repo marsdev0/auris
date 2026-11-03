@@ -1,3 +1,5 @@
+// Copyright (c) 2026 marsdev0
+// Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.ai.transcribe;
 
 import com.mars.auris.ai.config.EngineProperties;
@@ -124,16 +126,15 @@ class TranscribeServiceTest {
     void transcribeSync_success_returnsText() {
         // Setup: mock a normal engine return
         AsrResultDTO response = new AsrResultDTO();
-        response.setText("你好世界");
+        response.setText("hello world");
         mockEngineSuccess(response);
 
         // Execute
         TranscribeResp result = transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper");
 
         // Verify: the engine's full text passes through to the frontend model
-        assertEquals("你好世界", result.getText());
         // Verify: on success, persisted with the current userId (P3 write point ⑤, history)
-        verify(recordService).saveTranscribeSyncResult(eq(USER_ID), any(EngineResp.class));
+        assertEquals("hello world", result.getText());        verify(recordService).saveTranscribeSyncResult(eq(USER_ID), any(EngineResp.class));
     }
 
     // ========== Scenario 2: provider not passed, falls back to the configured default ==========
@@ -201,13 +202,13 @@ class TranscribeServiceTest {
     void transcribeSync_engine404_throwsTaskNotFound() {
         HttpClientErrorException notFound = new HttpClientErrorException(
                 HttpStatus.NOT_FOUND, "Not Found", HttpHeaders.EMPTY,
-                "{\"detail\": \"任务不存在或已过期\"}".getBytes(), null);
+                "{\"detail\": \"task not found or expired\"}".getBytes(), null);
         mockEngineThrow(notFound);
 
         AurisException ex = assertThrows(AurisException.class,
                 () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(404_101, ex.getCode());
-        assertEquals("任务不存在或已过期", ex.getMsg());
+        assertEquals("task not found or expired", ex.getMsg());
     }
 
     // ========== Scenario 7: engine returns 400 → 400 AUDIO_INVALID (msg passes through) ==========
@@ -216,13 +217,13 @@ class TranscribeServiceTest {
     void transcribeSync_engine400_throwsAudioInvalid() {
         HttpClientErrorException badRequest = new HttpClientErrorException(
                 HttpStatus.BAD_REQUEST, "Bad Request", HttpHeaders.EMPTY,
-                "{\"detail\": \"音频内容为空\"}".getBytes(), null);
+                "{\"detail\": \"audio content is empty\"}".getBytes(), null);
         mockEngineThrow(badRequest);
 
         AurisException ex = assertThrows(AurisException.class,
                 () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(400_101, ex.getCode());
-        assertEquals("音频内容为空", ex.getMsg());
+        assertEquals("audio content is empty", ex.getMsg());
     }
 
     // ========== Scenario 8: engine returns 500 → 502 ENGINE_ERROR (original text not passed through) ==========
@@ -231,13 +232,12 @@ class TranscribeServiceTest {
     void transcribeSync_engine500_throwsEngineError_noLeak() {
         HttpClientErrorException serverError = new HttpClientErrorException(
                 HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", HttpHeaders.EMPTY,
-                "{\"detail\": \"/usr/local/lib/python3.12/xxx 内部路径\"}".getBytes(), null);
+                "{\"detail\": \"/usr/local/lib/python3.12/xxx internal path\"}".getBytes(), null);
         mockEngineThrow(serverError);
 
         AurisException ex = assertThrows(AurisException.class,
                 () -> transcribeService.transcribeSync(USER_ID, "audio-bytes".getBytes(), "whisper"));
         assertEquals(502_101, ex.getCode());
         // Key point: 5xx does not pass through the engine's original text (may contain internal paths); only the unified message
-        assertEquals("转写引擎内部错误", ex.getMsg());
-    }
+        assertEquals("Transcription engine internal error", ex.getMsg());    }
 }

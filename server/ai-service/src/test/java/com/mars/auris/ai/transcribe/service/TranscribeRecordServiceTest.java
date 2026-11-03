@@ -1,3 +1,5 @@
+// Copyright (c) 2026 marsdev0
+// Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.ai.transcribe.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -67,7 +69,7 @@ class TranscribeRecordServiceTest {
             return 1;
         }).when(recordMapper).insert(any(TranscribeRecordDO.class));
 
-        Long id = recordService.createTask(1L, "task-abc", TranscribeConst.SOURCE_URL, "标题");
+        Long id = recordService.createTask(1L, "task-abc", TranscribeConst.SOURCE_URL, "title");
 
         assertEquals(2098825091037216769L, id);
         ArgumentCaptor<TranscribeRecordDO> captor = ArgumentCaptor.forClass(TranscribeRecordDO.class);
@@ -76,7 +78,7 @@ class TranscribeRecordServiceTest {
         assertEquals(1L, captor.getValue().getUserId());
         assertEquals("task-abc", captor.getValue().getEngineTaskId());
         assertEquals(TranscribeConst.SOURCE_URL, captor.getValue().getSource());
-        assertEquals("标题", captor.getValue().getTitle());
+        assertEquals("title", captor.getValue().getTitle());
         assertEquals(0, captor.getValue().getStatus());
     }
 
@@ -113,13 +115,13 @@ class TranscribeRecordServiceTest {
     void complete_passesTextAndTitleToConditionalUpdate() {
         AsrTaskDTO dto = new AsrTaskDTO();
         AsrTaskDTO.Result r = new AsrTaskDTO.Result();
-        r.setText("全文");
+        r.setText("full text");
         dto.setResult(r);
-        dto.setTitle("单集标题");
+        dto.setTitle("episode title");
 
         recordService.complete(1L, 2L, dto);
 
-        verify(recordMapper).complete(2L, 1L, "全文", "单集标题");
+        verify(recordMapper).complete(2L, 1L, "full text", "episode title");
     }
 
     @Test
@@ -138,7 +140,7 @@ class TranscribeRecordServiceTest {
     @Test
     void saveSync_directInsertAsCompleted_neverThrows() {
         AsrResultDTO data = new AsrResultDTO();
-        data.setText("同步结果");
+        data.setText("sync result");
         when(recordMapper.insert(any(TranscribeRecordDO.class)))
                 .thenThrow(new RuntimeException("db down"))
                 .thenReturn(1);
@@ -150,7 +152,7 @@ class TranscribeRecordServiceTest {
         verify(recordMapper).insert(captor.capture());
         assertEquals(TranscribeConst.SOURCE_UPLOAD_SYNC, captor.getValue().getSource());
         assertEquals(1, captor.getValue().getStatus());
-        assertEquals("同步结果", captor.getValue().getText());
+        assertEquals("sync result", captor.getValue().getText());
     }
 
     // ========== delete: 0 rows → false, caller turns into 404 ==========
@@ -169,15 +171,15 @@ class TranscribeRecordServiceTest {
     void failTimeout_marksEachAndPublishesEvent() {
         when(transcribeProperties.getTimeoutHours()).thenReturn(2);
         TranscribeRecordDO r = new TranscribeRecordDO();
-        r.setId(9L); r.setUserId(7L); r.setTitle("超时单集");
+        r.setId(9L); r.setUserId(7L); r.setTitle("timeout episode");
         when(recordMapper.selectTimeoutRecords(any())).thenReturn(List.of(r));
 
         int n = recordService.failTimeoutRecords();
 
         assertEquals(1, n);
         // Row-by-row fail(): the status=0 condition is mutually exclusive with polling backfill
-        verify(recordMapper).fail(9L, 7L, "转写超时未完成", "超时单集");
+        verify(recordMapper).fail(9L, 7L, "Transcription timed out", "timeout episode");
         // Each row emits auris-event (timeout is also a terminal state; the notification must reach)
-        verify(eventProducer).publishTranscribeTerminal(7L, 9L, "超时单集", "timeout");
+        verify(eventProducer).publishTranscribeTerminal(7L, 9L, "timeout episode", "timeout");
     }
 }

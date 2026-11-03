@@ -1,3 +1,5 @@
+// Copyright (c) 2026 marsdev0
+// Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.push.consumer;
 
 import com.mars.auris.common.utils.JsonUtils;
@@ -31,15 +33,14 @@ public class EventConsumer {
         TranscribeEvent event = JsonUtils.fromJson(message, TranscribeEvent.class);
         if (event == null) {
             // Parse error — would fail even on 10k retries; time to stop
-            log.error("事件不可解析: {}", message);
-            ack.acknowledge();
+            log.error("Event unparseable: {}", message);            ack.acknowledge();
             return;
         }
 
         try {
             NoticeService.CreateResult createResult = noticeService.createIfAbsent(event);
             if (createResult == null) {
-                log.error("落池结果异常,不 ack 等待重投: eventId={}", event.getEventId());
+                log.error("Persist result abnormal, not acking, awaiting redelivery: eventId={}", event.getEventId());
                 return;
             }
             if (createResult.created()) {
@@ -48,7 +49,7 @@ public class EventConsumer {
             }
             routerService.route(createResult.id(), event);
         } catch (Exception e) {
-            log.error("事件处理失败(不 ack,等待重投): {}", message, e);
+            log.error("Event processing failed (no ack, awaiting redelivery): {}", message, e);
             return;
         }
         ack.acknowledge();

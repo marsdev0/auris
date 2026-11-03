@@ -1,3 +1,5 @@
+// Copyright (c) 2026 marsdev0
+// Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.push.job;
 
 import com.mars.auris.push.entity.DeliveryDO;
@@ -124,8 +126,7 @@ public class RetryScanner {
                 } catch (Exception e) {
                     // No rollback, no compensation: the row is 3 with a 60s lease; reclaimExpiredLeases reaps and reschedules on expiry.
                     // The catch is for isolation only — don't let one row's send exception interrupt the whole batch (remaining rows are still 2, next round picks them up, just one round slower)
-                    log.error("重投发送失败,等待租约回收自愈: deliveryId={}", item.getId(), e);
-                }
+                    log.error("Retry send failed, waiting for lease recovery self-healing: deliveryId={}", item.getId(), e);                }
             }
         }
     }

@@ -94,8 +94,8 @@ def read_segs(task_id: str, name: str) -> list:
     return [Seg(**d) for d in json.loads((task_dir(task_id) / name).read_text())]
 
 
-def scan_pending() -> list[str]:
-    """Startup scan: tasks with status==running — checkpoint stays running on kill -9."""
+def _scan_by_status(status: str) -> list[str]:
+    """Scan task dirs by checkpoint.status, return matching task_ids (version filter aligned with load_checkpoint)."""
     out: list[str] = []
     if not DUB.DIR.exists():
         return out
@@ -107,6 +107,16 @@ def scan_pending() -> list[str]:
             s = json.loads(p.read_text())
         except (json.JSONDecodeError, OSError):
             continue
-        if s.get("v") == _V and s.get("status") == DubStatus.RUNNING.name.lower():
+        if s.get("v") == _V and s.get("status") == status:
             out.append(d.name)
     return out
+
+
+def scan_pending() -> list[str]:
+    """启动扫描: status==running 的任务——kill -9 时 checkpoint 停留 running。"""
+    return _scan_by_status(DubStatus.RUNNING.name.lower())
+
+
+def scan_completed() -> list[str]:
+    """启动扫描: status==completed 的任务——重启后重建只读条目,供 asset 下发。"""
+    return _scan_by_status(DubStatus.COMPLETED.name.lower())

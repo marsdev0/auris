@@ -5,10 +5,13 @@ package com.mars.auris.ai.dubbing.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mars.auris.ai.config.EngineProperties;
 import com.mars.auris.ai.dubbing.entity.DubbingTaskDO;
+import com.mars.auris.ai.dubbing.enums.DubbingKind;
+import com.mars.auris.ai.dubbing.enums.DubbingTaskStatus;
 import com.mars.auris.ai.dubbing.mapper.DubbingTaskMapper;
-import com.mars.auris.ai.dubbing.model.DubbingTaskResp;
+import com.mars.auris.ai.config.StorageProperties;
+import com.mars.auris.ai.dubbing.model.response.AssetUrlResp;
+import com.mars.auris.ai.dubbing.model.response.DubbingTaskResp;
 import com.mars.auris.ai.dubbing.model.engine.DubTaskDTO;
 import com.mars.auris.ai.engine.EngineClient;
 import com.mars.auris.ai.error.AIErrorCode;
@@ -22,12 +25,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -36,9 +45,10 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * Dubbing task orchestration (D6): submit idempotency + poll-to-DB + asset streaming proxy.
- * Two-level polling, each manages its own: getTask only calls engine once for non-terminal tasks and persists progress;
- * list is pure DB read. MySQL is the authoritative state; engine unreachable (404) → local mark-failed, no zombie rows.
+ * Dubbing task orchestration (D6/D8): submit idempotency (uk_user_url_hash unique-key fallback) + poll-to-DB
+ * + asset streaming proxy and presigned url issuing. Two-level polling, each manages its own: getTask only calls
+ * engine once for non-terminal tasks and persists progress; list is pure DB read. MySQL is the authoritative
+ * state; engine unreachable (404) → local mark-failed, no zombie rows.
  */
 @Slf4j
 @Service
@@ -69,28 +79,38 @@ public class DubbingService {
     private EngineClient engineClient;
 
     @Autowired
-    private EngineProperties properties;
+    private S3Presigner s3Presigner;
+
+    @Autowired
+    private StorageProperties storageProperties;
 
     public SubmitTaskResp submitUrl(Long userId, String url) {
-        // Idempotency: same user + url with an in-flight task → reject duplicate submit, return the existing task
-        DubbingTaskDO inflight = mapper.selectOne(Wrappers.<DubbingTaskDO>lambdaQuery()
-                .eq(DubbingTaskDO::getUserId, userId)
-                .eq(DubbingTaskDO::getUrl, url)
-                .in(DubbingTaskDO::getStatus, 0, 1)
-                .last("LIMIT 1"));
-        if (inflight != null) {
-            return new SubmitTaskResp(String.valueOf(inflight.getId()));
-        }
-
-        // Insert first (INIT) then call engine: the task lifecycle starts at "user submission"; engine-accept failures also leave a trace
+        // Insert first (INIT) then call engine: the task lifecycle starts at "user submission"; engine-accept failures also leave a trace.
+        // Oversized url is rejected at the entry by @Size(max=1024); no truncation here so the hash shares the same source as the stored value.
+        DubbingKind kind = guessKind(url);
         DubbingTaskDO task = new DubbingTaskDO();
         task.setUserId(userId);
-        task.setUrl(url.length() > 1024 ? url.substring(0, 1024) : url);
-        task.setKind(guessKind(url));
-        task.setStatus(0);
+        task.setUrl(url);
+        task.setUrlHash(DigestUtils.md5DigestAsHex(url.getBytes(StandardCharsets.UTF_8)));
+        task.setKind(kind.getCode());
+        task.setStatus(DubbingTaskStatus.INIT.getCode());
         task.setStageIndex(0);
-        task.setStageTotal("video".equals(task.getKind()) ? 8 : 6);
-        mapper.insert(task);
+        task.setStageTotal(kind.getStageTotal());
+        try {
+            // 幂等靠唯一键兜底,不先查再插(有并发窗口):同 user 同 url 终身一行
+            mapper.insert(task);
+        } catch (DuplicateKeyException e) {
+            // 撞 uk_user_url_hash → 回查续用已有任务(在途=幂等返回;终态=同条任务复用,不新发)
+            DubbingTaskDO existed = mapper.selectOne(Wrappers.<DubbingTaskDO>lambdaQuery()
+                    .eq(DubbingTaskDO::getUserId, userId)
+                    .eq(DubbingTaskDO::getUrlHash, task.getUrlHash())
+                    .last("LIMIT 1"));
+            if (existed == null) {
+                // 撞键却查不到 = 超出模型的异常状态(同 TranscribeRecordService 口径)
+                throw new AurisException(CommonErrorCode.INTERNAL_ERROR);
+            }
+            return new SubmitTaskResp(String.valueOf(existed.getId()));
+        }
         try {
             EngineResp<JsonNode> result = callEngine(() -> engineSubmit.post()
                     .uri(URL_DUB_SUBMIT)
@@ -101,7 +121,7 @@ public class DubbingService {
                     }));
             task.setEngineTaskId(result.getData().get("task_id").asText());
         } catch (AurisException e) {
-            task.setStatus(3);
+            task.setStatus(DubbingTaskStatus.FAILED.getCode());
             task.setErrorMsg(truncate(e.getMsg()));
             mapper.updateById(task);
             throw e;
@@ -115,13 +135,13 @@ public class DubbingService {
         if (task == null) {
             throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
         }
-        if (task.getStatus() >= 2) {
+        if (DubbingTaskStatus.isTerminal(task.getStatus())) {
             return to(task);   // 终态回源 DB,不打 engine
         }
-        if (task.getStatus() == 0 && task.getEngineTaskId() == null) {
+        if (task.getStatus() == DubbingTaskStatus.INIT.getCode() && task.getEngineTaskId() == null) {
             // Orphan from an interrupted submit (process crash after the engine call etc.): backfill terminal state, better than forever-INIT
-            task.setStatus(3);
-            task.setErrorMsg("发起中断(engine 未受理)");
+            task.setStatus(DubbingTaskStatus.FAILED.getCode());
+            task.setErrorMsg("Aborted at submission (engine did not accept)");
             mapper.updateById(task);
             return to(task);
         }
@@ -136,24 +156,24 @@ public class DubbingService {
         } catch (AurisException e) {
             // Engine TTL expired / restarted and lost the in-memory task → mark failed locally; don't let it run forever
             if (Objects.equals(e.getCode(), AIErrorCode.TASK_NOT_FOUND.getCode())) {
-                task.setStatus(3);
-                task.setErrorMsg("engine 任务丢失(过期或重启)");
+                task.setStatus(DubbingTaskStatus.FAILED.getCode());
+                task.setErrorMsg("Engine task lost (expired or restarted)");
                 mapper.updateById(task);
             }
             throw e;
         }
         DubTaskDTO d = result.getData();
-        int st = d.getStatus() == null ? 1 : d.getStatus();   // 引擎异常形态兜底当 running
-        if (st == 2) {
-            task.setStatus(2);
+        int st = d.getStatus() == null ? DubbingTaskStatus.RUNNING.getCode() : d.getStatus();   // 引擎异常形态兜底当 running
+        if (st == DubbingTaskStatus.COMPLETED.getCode()) {
+            task.setStatus(DubbingTaskStatus.COMPLETED.getCode());
             task.setTitle(d.getTitle());
             task.setAudioBytes(d.getAudioBytes());
             task.setStageIndex(d.getStageTotal());
-        } else if (st == 3) {
-            task.setStatus(3);
+        } else if (st == DubbingTaskStatus.FAILED.getCode()) {
+            task.setStatus(DubbingTaskStatus.FAILED.getCode());
             task.setErrorMsg(truncate(d.getError()));
         } else {
-            task.setStatus(1);   // INIT(0)/RUNNING(1) 轮询到即开工,推进度
+            task.setStatus(DubbingTaskStatus.RUNNING.getCode());   // INIT/RUNNING 轮询到即开工,推进度
             task.setStageIndex(d.getStageIndex());
         }
         if (d.getTitle() != null && task.getTitle() == null) {
@@ -197,7 +217,7 @@ public class DubbingService {
      */
     public void streamAsset(Long userId, Long id, String kind, String range, HttpServletResponse resp) {
         DubbingTaskDO task = findByUserIdAndId(userId, id);
-        if (task == null || task.getStatus() != 2 || task.getEngineTaskId() == null) {
+        if (task == null || task.getStatus() != DubbingTaskStatus.COMPLETED.getCode() || task.getEngineTaskId() == null) {
             throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
         }
         String safeKind = switch (kind == null ? "audio" : kind) {
@@ -226,14 +246,56 @@ public class DubbingService {
                 });
     }
 
-    private static String guessKind(String url) {
+
+    /**
+     * 预签名 URL 签发:Java 从"流字节"变"发凭证",浏览器直连对象存储。
+     * 纯本地计算(SigV4),零网络调用;key 约定式拼出
+     * kind 按任务形态白名单:presign 不校验对象存在性,fallback 会签出打开必 403 的
+     * URL——错误在签发时暴露(404),而非播放时(与 streamAsset 的 fallback 语义刻意不同)。
+     */
+    public AssetUrlResp signAsset(Long userId, Long id, String kind) {
+        DubbingTaskDO task = findByUserIdAndId(userId, id);
+        if (task == null || task.getStatus() != DubbingTaskStatus.COMPLETED.getCode() || task.getEngineTaskId() == null) {
+            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
+        }
+
+        // kind 按任务形态白名单映射文件名:video 任务有 output.mp4/dub.srt,audio 任务只有 narration.mp3
+        boolean video = DubbingKind.VIDEO.getCode().equals(task.getKind());
+        String name = null;
+        if (video) {
+            if ("video".equals(kind)) {
+                name = "output.mp4";
+            } else if ("srt".equals(kind)) {
+                name = "dub.srt";
+            }
+        } else if (kind == null || "audio".equals(kind)) {
+            name = "narration.mp3";
+        }
+        if (name == null) {
+            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);   // 形态不匹配,404 不泄露存在性
+        }
+
+        String key = "dubbing/" + task.getEngineTaskId() + "/" + name;
+        var presigned = s3Presigner.presignGetObject(GetObjectPresignRequest.builder()
+                .signatureDuration(storageProperties.getPresignExpire())
+                .getObjectRequest(GetObjectRequest.builder()
+                        .bucket(storageProperties.getBucket())
+                        .key(key)
+                        .build())
+                .build());
+        log.info("signAsset presigned: {}", presigned);
+        return new AssetUrlResp(presigned.url().toString(),
+                storageProperties.getPresignExpire().toSeconds());
+    }
+
+    private static DubbingKind guessKind(String url) {
         String u = url.toLowerCase(Locale.ROOT);
         if (u.contains("bilibili.com") || u.contains("b23.tv")) {
-            return "video";
+            return DubbingKind.VIDEO;
         }
         int dot = u.lastIndexOf('.');
         String ext = dot >= 0 ? u.substring(dot) : "";
-        return VIDEO_EXT.contains(ext) ? "video" : "audio";
+        return VIDEO_EXT.contains(ext) ? DubbingKind.VIDEO : DubbingKind.AUDIO;
     }
 
     private static void passHeader(HttpServletResponse resp, String name, String value) {
@@ -258,12 +320,7 @@ public class DubbingService {
         r.setTitle(t.getTitle());
         r.setUrl(t.getUrl());
         r.setKind(t.getKind());
-        r.setStatus(switch (t.getStatus()) {
-            case 2 -> "completed";
-            case 3 -> "failed";
-            case 0 -> "init";
-            default -> "running";
-        });
+        r.setStatus(DubbingTaskStatus.of(t.getStatus()).name().toLowerCase());
         r.setStageIndex(t.getStageIndex());
         r.setStageTotal(t.getStageTotal());
         r.setAudioBytes(t.getAudioBytes());

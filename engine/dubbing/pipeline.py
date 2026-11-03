@@ -24,6 +24,7 @@ from engine.dubbing.mux import mux
 from engine.dubbing.tasks import DubStatus
 from engine.dubbing.types import Seg, Stage, VStage
 from engine.tts.service import get_tts_service
+from engine.storage import s3 as storage
 
 # _SR = ASR.SAMPLE_RATE
 _TTS_RETRY = 3
@@ -123,6 +124,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
         parts = sorted((tdir / "chunks").glob("*.mp3"))  # take from disk, do not depend on earlier branch vars
         final = tdir / "narration.mp3"
         await concat_mp3(parts, final)
+        await storage.upload_artifacts(task_id, "audio")
         ckp.save_checkpoint(
             task_id,
             url=url,
@@ -337,6 +339,7 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
         out = tdir / "output.mp4"
         await align.loudnorm(tdir / "dub_track.wav", tdir / "dub.m4a")
         await mux(tdir / "src.mp4", tdir / "dub.m4a", out)
+        await storage.upload_artifacts(task_id, "video")
         ckp.save_checkpoint(task_id, url=url, stage_index=len(VStage), status=DubStatus.COMPLETED,
                             title=title, kind="video")
         for p in (tdir / "aligned").glob("*.wav"):

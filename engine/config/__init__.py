@@ -15,5 +15,6 @@ from engine.config.asr import AsrSettings as ASR
 from engine.config.dub import DubSettings as DUB
 from engine.config.llm import LlmSettings as LLM
 from engine.config.tts import TtsSettings as TTS
+from engine.config.storage import StorageSettings as STORAGE
 
-__all__ = ["APP", "ASR", "TTS", "LLM", "DUB"]
+__all__ = ["APP", "ASR", "TTS", "LLM", "DUB", "STORAGE"]

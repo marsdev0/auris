@@ -27,13 +27,16 @@ public class DubbingTaskDO {
     /** Source URL */
     private String url;
 
+    /** md5 hex of the source url, idempotency dedup key (uk_user_url_hash) */
+    private String urlHash;
+
     /** Display name (backfilled after download completes) */
     private String title;
 
-    /** audio|video (D5 dual-form) */
+    /** audio|video (D5 dual-form), see DubbingKind enum */
     private String kind;
 
-    /** 0-init 1-running 2-completed 3-failed */
+    /** 0-init 1-running 2-completed 3-failed,枚举 DubbingTaskStatus */
     private Integer status;
 
     /** Current stage (0-based) */

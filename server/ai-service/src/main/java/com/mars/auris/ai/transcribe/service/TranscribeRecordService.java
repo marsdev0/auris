@@ -1,3 +1,5 @@
+// Copyright (c) 2026 marsdev0
+// Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.ai.transcribe.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -71,7 +73,7 @@ public class TranscribeRecordService {
             recordMapper.insert(item);
         } catch (DuplicateKeyException e) {
             // Cannot return item.getId(): the insert didn't succeed, that's an unpersisted fake id; query back the existing record, reuse its recordId
-            log.error("engine_task_id 重复, userId: {}, taskId: {}", userId, engineTaskId);
+            log.error("duplicate engine_task_id, userId: {}, taskId: {}", userId, engineTaskId);
             TranscribeRecordDO recordDO = recordMapper.selectByUserIdAndEngineTaskId(userId, engineTaskId);
             if (recordDO == null) {
                 // Hit the global unique key but not found by ownership = cross-user uuid collision, beyond the model
@@ -112,11 +114,11 @@ public class TranscribeRecordService {
         List<TranscribeRecordDO> records = recordMapper.selectTimeoutRecords(cutoff);
         for (TranscribeRecordDO r : records) {
             // Row-by-row fail(): with the status=0 condition, naturally mutually exclusive with polling backfill (P3 §2.4)
-            fail(r.getUserId(), r.getId(), "转写超时未完成", r.getTitle());
+            fail(r.getUserId(), r.getId(), "Transcription timed out", r.getTitle());
             eventProducer.publishTranscribeTerminal(r.getUserId(), r.getId(), r.getTitle(), "timeout");
         }
         if (!records.isEmpty()) {
-            log.warn("定时兜底:超 {}h 未完成,标 failed {} 条", transcribeProperties.getTimeoutHours(), records.size());
+            log.warn("Scheduled fallback: exceeded {}h without completion, marked {} records failed", transcribeProperties.getTimeoutHours(), records.size());
         }
         return records.size();
     }

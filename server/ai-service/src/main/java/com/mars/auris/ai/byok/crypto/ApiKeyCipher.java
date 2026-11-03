@@ -40,10 +40,10 @@ public class ApiKeyCipher {
         try {
             key = Base64.getDecoder().decode(properties.getMasterKey());
         } catch (IllegalArgumentException e) {
-            throw new IllegalStateException("auris.byok.master-key 不是合法的 Base64", e);
+            throw new IllegalStateException("auris.byok.master-key is not valid Base64", e);
         }
         if (key.length != 32) {
-            throw new IllegalStateException("auris.byok.master-key 必须是 Base64 编码的 32 字节(AES-256)");
+            throw new IllegalStateException("auris.byok.master-key must be 32 bytes (AES-256) Base64-encoded");
         }
         this.keySpec = new SecretKeySpec(key, "AES");
         this.keyVersion = properties.getKeyVersion();
@@ -64,7 +64,7 @@ public class ApiKeyCipher {
             System.arraycopy(cipherText, 0, out, IV_LENGTH, cipherText.length);
             return out;
         } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("apiKey 加密失败", e);
+            throw new IllegalStateException("apiKey encryption failed", e);
         }
     }
 
@@ -79,7 +79,7 @@ public class ApiKeyCipher {
             cipher.init(Cipher.DECRYPT_MODE, keySpec, new GCMParameterSpec(TAG_BITS, iv));
             return new String(cipher.doFinal(cipherText), StandardCharsets.UTF_8);
         } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("apiKey 解密失败", e);
+            throw new IllegalStateException("apiKey decryption failed", e);
         }
     }
 
