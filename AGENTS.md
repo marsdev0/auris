@@ -13,7 +13,7 @@
 | Java 测试 / 构建 | `make test-java` / `make build-java`（等价 `cd server && ./mvnw test` / `./mvnw -q verify`） |
 | Python 依赖 | `uv add <pkg>` / `uv sync`（加删依赖后记得提交 uv.lock） |
 
-端口速查：engine 18000 · gateway 8080 · ai 8081 · user 8082 · push 8083 · 前端 5173 · nacos 8848 · kafka 9092 · kafka-ui 9000。
+端口速查：engine 18000 · gateway 8080 · ai 8081 · user 8082 · push 8083 · 前端 5173 · nacos 8848 · kafka 9092 · kafka-ui 9000 · rustfs 9100(api)/9101(console)。
 
 ## 硬性规则（踩过的坑）
 

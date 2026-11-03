@@ -12,7 +12,7 @@ AI 代跑(用户已授权,不需要用户执行命令)。所有命令在**仓库
 
 | 层 | 服务(端口) | 启动 | 健康判定 |
 |---|---|---|---|
-| infra | mysql/redis/kafka/nacos(3306/6379/9092/8848) | `make infra-up` | `docker ps` 见 auris-* 容器;nacos console 8848 有响应 |
+| infra | mysql/redis/kafka/nacos/**rustfs**(3306/6379/9092/8848/**9100/9101**) | `make infra-up` | `docker ps` 见 auris-* 容器;nacos console 8848 有响应;`curl localhost:9100/health` = ok(rustfs 9100=S3 API/9101=console) |
 | 推理 | omlx(:28000,LLM+qwen3-asr 共用) | **只探测,不代起** | `curl 127.0.0.1:28000/v1/models` 有响应 |
 | engine | Python(:18000) | `nohup make run-engine > tmp/run-engine.log 2>&1 &` | `/health` = 200 |
 | java | user/ai/gateway(:8082/8081/8080) | 各 `nohup make run-user|run-ai|run-gateway > tmp/run-xxx.log 2>&1 &` | 端口 POST 空 body:**400/401=活**(正常拒绝),000=死;无 actuator |
@@ -23,8 +23,8 @@ AI 代跑(用户已授权,不需要用户执行命令)。所有命令在**仓库
 
 ## 启动流程(全套,按依赖顺序)
 
-1. **infra**:`docker ps` 查 auris-mysql/redis/kafka/nacos;缺则 `make infra-up`,
-   等待 ~15s 后复验(nacos console 最慢)。
+1. **infra**:`docker ps` 查 auris-mysql/redis/kafka/nacos/**rustfs**;缺则 `make infra-up`,
+   等待 ~15s 后复验(nacos console 最慢;rustfs 起得快,`curl localhost:9100/health` 验)。
 2. **omlx 探测**(不阻塞):`curl -s --max-time 3 http://127.0.0.1:28000/v1/models`;
    无响应则在最终汇报中提示用户:
    > 「omlx 推理服务(:28000)未运行——LLM 翻译与 qwen3-asr 转写不可用
@@ -35,7 +35,8 @@ AI 代跑(用户已授权,不需要用户执行命令)。所有命令在**仓库
    → 多为 nacos 未就绪的瞬态,等 10s 整体重试一次;仍失败 → 回查第 1 步容器。
 5. **前端**:nohup 起;轮询 5173 到 200。
 6. **汇报**:表格输出各层状态(端口/健康/日志路径),异常项给根因和处置建议;
-   提示测试账号(见 .env 的 AURIS_TEST_*)与素材链接(tests/assets/README.md)。
+   提示测试账号(见 .env 的 AURIS_TEST_*)与素材链接(tests/assets/README.md);
+   涉及产物排障时提示 RustFS console http://localhost:9101(auris/auris-secret)。
 
 ## 参数化(部分启动)
 
@@ -78,6 +79,9 @@ stage_index FROM dubbing_task ORDER BY id DESC LIMIT 3"`)。
 | engine 任务下载 404 | 素材链路断(raw.githubusercontent 间歇不可达) | 换 jsDelivr(gh 镜像)或 tests/assets 备用素材 |
 | 任务页面停在第一步但 engine 早已完成 | DB 只被 getTask 推进,页面心跳停 | 硬刷新页面;根治在 D6.5 事件推送 |
 | dubbing 页面字段全空/渲染崩 | 后端分页字段是 records 不是 items | 对齐 transcribe 同款口径 |
+| 改了 .env 的 Java 侧变量(如 PRESIGN_EXPIRE_S)重启 ai-service 不生效 | **.env 只喂 engine**(python-dotenv),Java 的 `${ENV:默认}` 靠进程环境变量 | 临时注入 `FOO=xx make run-ai`;常态改 application.yaml 默认值(2026-11-03 实测) |
+| 前端 5173 探测 000 误判死 | vite 默认只绑 IPv6 `[::1]` | 探测用 `http://localhost:5173/`(勿用 127.0.0.1);浏览器访问不受影响 |
+| asset/asset-url 返回 404 | 非 COMPLETED/归属不匹配/kind 越界 → 404 属**正常设计**(签发侧白名单) | 任务已 COMPLETED 仍 404 才是异常:查 RustFS 对象存在性(console 9101 或 boto3 list,key=`dubbing/{engine_task_id}/{output.mp4\|narration.mp3\|dub.srt}`) |
 
 ## 边界
 
