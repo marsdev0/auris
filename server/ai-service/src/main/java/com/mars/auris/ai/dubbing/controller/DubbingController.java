@@ -2,8 +2,9 @@
 // Licensed under the MIT License. See the LICENSE file for details.
 package com.mars.auris.ai.dubbing.controller;
 
-import com.mars.auris.ai.dubbing.model.DubbingTaskResp;
-import com.mars.auris.ai.dubbing.req.DubbingSubmitReq;
+import com.mars.auris.ai.dubbing.model.response.AssetUrlResp;
+import com.mars.auris.ai.dubbing.model.response.DubbingTaskResp;
+import com.mars.auris.ai.dubbing.model.request.DubbingSubmitReq;
 import com.mars.auris.ai.dubbing.service.DubbingService;
 import com.mars.auris.ai.transcribe.model.PageResp;
 import com.mars.auris.ai.transcribe.model.SubmitTaskResp;
@@ -61,5 +62,16 @@ public class DubbingController {
                       @RequestHeader(value = "Range", required = false) String range,
                       HttpServletResponse resp) {
         dubbingService.streamAsset(user.userId(), id, kind, range, resp);
+    }
+
+    /**
+     * 产物预签名
+     * URL 签发, Java从"流字节"变"发凭证", 浏览器直连对象存储
+     */
+    @GetMapping("/{id}/asset-url")
+    public ApiResponse<AssetUrlResp> assetUrl(@AuthenticationPrincipal UserPrincipal user,
+                                              @PathVariable Long id,
+                                              @RequestParam(defaultValue = "audio") String kind) {
+        return ApiResponse.ok(dubbingService.signAsset(user.userId(), id, kind));
     }
 }

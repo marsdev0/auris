@@ -1,6 +1,6 @@
 // Copyright (c) 2026 marsdev0
 // Licensed under the MIT License. See the LICENSE file for details.
-package com.mars.auris.ai.dubbing.req;
+package com.mars.auris.ai.dubbing.model.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

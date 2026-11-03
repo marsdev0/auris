@@ -50,3 +50,9 @@ auris:
     # AES-256 主密钥(Base64 的 32 字节),生产必须由 BYOK_MASTER_KEY 注入,此处仅开发默认值
     master-key: ${BYOK_MASTER_KEY:cyOkERCuEofTKaERZwLhAueq3dIjgccZ6nAfHlEHIvI=}
     key-version: 1
+  storage:
+    endpoint: ${RUSTFS_ENDPOINT:http://localhost:9100}
+    access-key: ${RUSTFS_ACCESS_KEY:auris}
+    secret-key: ${RUSTFS_SECRET_KEY:auris-secret}
+    bucket: ${RUSTFS_BUCKET:auris-dubbing}
+    presign-expire: ${PRESIGN_EXPIRE_S:900}s

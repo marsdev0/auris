@@ -9,7 +9,9 @@ import com.mars.auris.ai.dubbing.entity.DubbingTaskDO;
 import com.mars.auris.ai.dubbing.enums.DubbingKind;
 import com.mars.auris.ai.dubbing.enums.DubbingTaskStatus;
 import com.mars.auris.ai.dubbing.mapper.DubbingTaskMapper;
-import com.mars.auris.ai.dubbing.model.DubbingTaskResp;
+import com.mars.auris.ai.config.StorageProperties;
+import com.mars.auris.ai.dubbing.model.response.AssetUrlResp;
+import com.mars.auris.ai.dubbing.model.response.DubbingTaskResp;
 import com.mars.auris.ai.dubbing.model.engine.DubTaskDTO;
 import com.mars.auris.ai.engine.EngineClient;
 import com.mars.auris.ai.error.AIErrorCode;
@@ -29,6 +31,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -71,6 +76,12 @@ public class DubbingService {
 
     @Autowired
     private EngineClient engineClient;
+
+    @Autowired
+    private S3Presigner s3Presigner;
+
+    @Autowired
+    private StorageProperties storageProperties;
 
     public SubmitTaskResp submitUrl(Long userId, String url) {
         // 先落库(INIT)再调 engine:任务生命周期从"用户发起"起算,engine 受理失败也留痕
@@ -232,6 +243,48 @@ public class DubbingService {
                     }
                     return null;
                 });
+    }
+
+
+    /**
+     * 预签名 URL 签发:Java 从"流字节"变"发凭证",浏览器直连对象存储。
+     * 纯本地计算(SigV4),零网络调用;key 约定式拼出
+     * kind 按任务形态白名单:presign 不校验对象存在性,fallback 会签出打开必 403 的
+     * URL——错误在签发时暴露(404),而非播放时(与 streamAsset 的 fallback 语义刻意不同)。
+     */
+    public AssetUrlResp signAsset(Long userId, Long id, String kind) {
+        DubbingTaskDO task = findByUserIdAndId(userId, id);
+        if (task == null || task.getStatus() != DubbingTaskStatus.COMPLETED.getCode() || task.getEngineTaskId() == null) {
+            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);
+        }
+
+        // kind 按任务形态白名单映射文件名:video 任务有 output.mp4/dub.srt,audio 任务只有 narration.mp3
+        boolean video = DubbingKind.VIDEO.getCode().equals(task.getKind());
+        String name = null;
+        if (video) {
+            if ("video".equals(kind)) {
+                name = "output.mp4";
+            } else if ("srt".equals(kind)) {
+                name = "dub.srt";
+            }
+        } else if (kind == null || "audio".equals(kind)) {
+            name = "narration.mp3";
+        }
+        if (name == null) {
+            throw new AurisException(AIErrorCode.TASK_NOT_FOUND);   // 形态不匹配,404 不泄露存在性
+        }
+
+        String key = "dubbing/" + task.getEngineTaskId() + "/" + name;
+        var presigned = s3Presigner.presignGetObject(GetObjectPresignRequest.builder()
+                .signatureDuration(storageProperties.getPresignExpire())
+                .getObjectRequest(GetObjectRequest.builder()
+                        .bucket(storageProperties.getBucket())
+                        .key(key)
+                        .build())
+                .build());
+        log.info("signAsset presigned: {}", presigned);
+        return new AssetUrlResp(presigned.url().toString(),
+                storageProperties.getPresignExpire().toSeconds());
     }
 
     private static DubbingKind guessKind(String url) {
