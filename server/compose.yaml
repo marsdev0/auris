@@ -69,8 +69,30 @@ services:
       - kafka
     restart: always
 
+  # 对象存储(P12-D8):S3 兼容,存配音产物,asset 改预签名 URL 分发
+  # 选型 RustFS 而非 MinIO:2026-11-01 核实 MinIO 社区版仓库已归档(见 D8 方案 §3)
+  # 宿主端口避让:9000 被 kafka-ui 占 → api 映射 9100、console 映射 9101(容器内仍是 9000/9001)
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: auris-rustfs
+    ports:
+      - "9100:9000"  # S3 API(boto3/AWS SDK endpoint 用 http://localhost:9100,path-style)
+      - "9101:9001"  # Web 控制台
+    environment:
+      RUSTFS_ACCESS_KEY: auris          # 开发凭证,与 mysql root/root 同级约定
+      RUSTFS_SECRET_KEY: auris-secret
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_OBS_LOGGER_LEVEL: error   # 日志走 stdout(docker logs);不配 LOG_DIRECTORY(非 root 写不了 /var/log)
+    volumes:
+      - rustfs-data:/data
+    command: ["/data"]   # 数据目录作位置参数(官方 docker run 同款)
+    restart: always
+
 volumes:
   nacos-data:
   mysql-data:
   redis-data:
   kafka-data:
+  rustfs-data:
