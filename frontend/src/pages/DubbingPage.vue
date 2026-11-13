@@ -10,7 +10,7 @@ import {
   listDubbing, getDubbing, submitDubbing, deleteDubbing, fetchAssetUrl, downloadSubtitle,
   stagesFor, type DubbingTask,
 } from '../services/dubbing'
-import { fmtUtc } from '../services/api'
+import { fmtUtc, ApiError } from '../services/api'
 
 const emit = defineEmits<{ back: []; toModels: [] }>()
 
@@ -65,6 +65,7 @@ async function submit() {
     await refresh()
     showToast('已发起,任务已入队')
   } catch (e) {
+    if (byokGate(e)) return
     showToast(e instanceof Error ? e.message : '发起失败')
   } finally {
     submitting.value = false
@@ -77,8 +78,19 @@ async function retry(t: DubbingTask) {
     await refresh()
     showToast('已重新发起(同 URL 在途会幂等复用)')
   } catch (e) {
+    if (byokGate(e)) return
     showToast(e instanceof Error ? e.message : '发起失败')
   }
+}
+
+/** P13 D3:后端 403 MODEL_CONFIG_REQUIRED(配音需 verified 的 llm+tts 配置)→ 引导跳模型配置页 */
+function byokGate(e: unknown): boolean {
+  if (e instanceof ApiError && e.code === 403_101) {
+    showToast(e.message || '请先在「模型配置」中配好并通过校验(LLM/TTS)')
+    emit('toModels')
+    return true
+  }
+  return false
 }
 
 async function remove(t: DubbingTask) {

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  api_key 强制脱敏过滤器——logback pattern 兜底掩码,
+  覆盖 sk- 串与 Bearer 头两种形态。第二道兜底(第一道是"不打请求体"纪律):
+  整包 JSON body 落日志时,不匹配两种形态的 key 仍可能漏,根因上仍靠纪律。
+-->
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{36} - %replace(%msg){'sk-[A-Za-z0-9_\-]{8,}',
+                'sk-***'}%replace(%msg){'(?i)bearer\s+[A-Za-z0-9_\-.]{8,}', 'bearer ***'}%n
+            </pattern>
+        </encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

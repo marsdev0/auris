@@ -4,8 +4,10 @@ import time
 from uuid import uuid4
 from pydantic import BaseModel
 
+from engine.byok.schemas import ByokContext
 from engine.dubbing.types import DubStatus, Stage, VStage
 from loguru import logger
+from engine.config import DUB
 
 
 class DubbingTask(BaseModel):
@@ -56,7 +58,7 @@ def _guess_kind(url: str) -> str:
     return "audio"
 
 
-async def submit(url: str) -> str:
+async def submit(url: str, byok: ByokContext | None = None) -> str:
     from engine.dubbing.pipeline import _run, _run_video
     now = time.time()
     task_id = uuid4().hex
@@ -65,7 +67,7 @@ async def submit(url: str) -> str:
         task_id=task_id, created_at=now, updated_at=now,
         kind=kind, stage_total=len(VStage) if kind == "video" else len(Stage))
     runner = _run_video if kind == "video" else _run
-    asyncio.create_task(runner(task_id, url))
+    asyncio.create_task(runner(task_id, url, byok=byok))
     return task_id
 
 

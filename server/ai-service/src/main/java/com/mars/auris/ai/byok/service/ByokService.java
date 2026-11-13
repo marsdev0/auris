@@ -9,6 +9,7 @@ import com.mars.auris.ai.byok.entity.UserModelConfigDO;
 import com.mars.auris.ai.byok.enums.ConfigStatus;
 import com.mars.auris.ai.byok.enums.ModelDomain;
 import com.mars.auris.ai.byok.mapper.UserModelConfigMapper;
+import com.mars.auris.ai.byok.model.DubbingGrant;
 import com.mars.auris.ai.byok.model.engine.EngineValidateReq;
 import com.mars.auris.ai.byok.model.engine.EngineValidateResp;
 import com.mars.auris.ai.byok.req.SaveConfigReq;
@@ -18,6 +19,7 @@ import com.mars.auris.ai.error.AIErrorCode;
 import com.mars.auris.ai.model.EngineResp;
 import com.mars.auris.common.error.AurisException;
 import com.mars.auris.common.error.CommonErrorCode;
+import com.mars.auris.common.utils.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -25,12 +27,17 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -43,7 +50,9 @@ public class ByokService {
 
     private static final List<ModelDomain> list = List.of(ModelDomain.LLM, ModelDomain.ASR, ModelDomain.TTS);
 
-    /** Self-hosted gateway providers, baseUrl required */
+    /**
+     * Self-hosted gateway providers, baseUrl required
+     */
     private static final String PROVIDER_OPENAI_COMPAT = "openai_compat";
 
     // Default; no tenants for now
@@ -67,7 +76,7 @@ public class ByokService {
 
     public List<ModelConfigVO> list(Long userId) {
         List<ModelConfigVO> res = new ArrayList<>();
-        for (ModelDomain item: list) {
+        for (ModelDomain item : list) {
             UserModelConfigDO userModelConfigDO = modelConfigMapper.selectByTenantUserDomain(tenantId, userId, item.getValue());
             if (userModelConfigDO != null) {
                 res.add(byokConvert.toVO(userModelConfigDO));
@@ -121,21 +130,11 @@ public class ByokService {
             throw new AurisException(CommonErrorCode.INTERNAL_ERROR, "Config save conflict, please retry");
         }
 
-        boolean endpointChanged = !Objects.equals(old.getProvider(), req.getProvider())
-                || !Objects.equals(old.getBaseUrl(), req.getBaseUrl());
+        boolean endpointChanged = !Objects.equals(old.getProvider(), req.getProvider()) || !Objects.equals(old.getBaseUrl(), req.getBaseUrl());
 
-        LambdaUpdateWrapper<UserModelConfigDO> uw = new LambdaUpdateWrapper<UserModelConfigDO>()
-                .eq(UserModelConfigDO::getId, old.getId())
-                .set(UserModelConfigDO::getProvider, req.getProvider())
-                .set(UserModelConfigDO::getBaseUrl, req.getBaseUrl())
-                .set(UserModelConfigDO::getModel, req.getModel())
-                .set(UserModelConfigDO::getVoice, req.getVoice())
-                .set(UserModelConfigDO::getUpdatedAt, LocalDateTime.now());
+        LambdaUpdateWrapper<UserModelConfigDO> uw = new LambdaUpdateWrapper<UserModelConfigDO>().eq(UserModelConfigDO::getId, old.getId()).set(UserModelConfigDO::getProvider, req.getProvider()).set(UserModelConfigDO::getBaseUrl, req.getBaseUrl()).set(UserModelConfigDO::getModel, req.getModel()).set(UserModelConfigDO::getVoice, req.getVoice()).set(UserModelConfigDO::getUpdatedAt, LocalDateTime.now());
         if (keyChanged) {
-            uw.set(UserModelConfigDO::getApiKeyCipher, entity.getApiKeyCipher())
-                    .set(UserModelConfigDO::getKeyVersion, entity.getKeyVersion())
-                    .set(UserModelConfigDO::getKeyHint, entity.getKeyHint())
-                    .set(UserModelConfigDO::getStatus, ConfigStatus.UNVERIFIED.getCode());
+            uw.set(UserModelConfigDO::getApiKeyCipher, entity.getApiKeyCipher()).set(UserModelConfigDO::getKeyVersion, entity.getKeyVersion()).set(UserModelConfigDO::getKeyHint, entity.getKeyHint()).set(UserModelConfigDO::getStatus, ConfigStatus.UNVERIFIED.getCode());
         } else if (endpointChanged) {
             uw.set(UserModelConfigDO::getStatus, ConfigStatus.UNVERIFIED.getCode());
         }
@@ -176,30 +175,75 @@ public class ByokService {
         engineReq.setApiKey(apiKey);
         engineReq.setModel(config.getModel());
         engineReq.setVoice(config.getVoice());
-        EngineResp<EngineValidateResp> engineResp = engineClient.execute(
-                () -> engineByok.post()
-                        .uri("/byok/validate")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(engineReq)
-                        .retrieve()
-                        .body(new ParameterizedTypeReference<>() {}),
+        EngineResp<EngineValidateResp> engineResp = engineClient.execute(() -> engineByok.post().uri("/byok/validate").contentType(MediaType.APPLICATION_JSON).body(engineReq).retrieve().body(new ParameterizedTypeReference<>() {
+                }),
                 // byok domain mapping: engine-side exceptions uniformly 502. Pass/fail is expressed by code, an expected business branch not intercepted at this layer
                 e -> new AurisException(AIErrorCode.ENGINE_ERROR));
 
         // 3. Write back the result: status/last_checked_at/detail (success appends latency, failure carries engine's message)
-        LambdaUpdateWrapper<UserModelConfigDO> uw = new LambdaUpdateWrapper<UserModelConfigDO>()
-                .eq(UserModelConfigDO::getId, config.getId())
-                .set(UserModelConfigDO::getStatus, engineResp.isSuccess()
-                        ? ConfigStatus.VERIFIED.getCode() : ConfigStatus.FAILED.getCode())
-                .set(UserModelConfigDO::getLastCheckedAt, LocalDateTime.now());
+        LambdaUpdateWrapper<UserModelConfigDO> uw = new LambdaUpdateWrapper<UserModelConfigDO>().eq(UserModelConfigDO::getId, config.getId()).set(UserModelConfigDO::getStatus, engineResp.isSuccess() ? ConfigStatus.VERIFIED.getCode() : ConfigStatus.FAILED.getCode()).set(UserModelConfigDO::getLastCheckedAt, LocalDateTime.now());
         if (engineResp.isSuccess() && engineResp.getData() != null) {
             // No separate latency column; appended into detail ("models listed, 87 available · 812ms")
-            uw.set(UserModelConfigDO::getValidateDetail,
-                    engineResp.getData().getDetail() + " · " + engineResp.getData().getLatencyMs() + "ms");
+            uw.set(UserModelConfigDO::getValidateDetail, engineResp.getData().getDetail() + " · " + engineResp.getData().getLatencyMs() + "ms");
         } else {
             uw.set(UserModelConfigDO::getValidateDetail, engineResp.getMessage());
         }
         modelConfigMapper.update(null, uw);
         return engineResp.isSuccess();
+    }
+
+    public DubbingGrant resolveForDubbing(Long userId) {
+        List<String> missing = new ArrayList<>();
+        Map<String, Object> byok = new LinkedHashMap<>();
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        byok.put("user_id", userId);
+        for (ModelDomain domain : list) {
+            UserModelConfigDO cfg = modelConfigMapper.selectByTenantUserDomain(tenantId, userId, domain.getValue());
+            boolean usable = cfg != null && cfg.getStatus() == ConfigStatus.VERIFIED.getCode();
+            if (!usable) {
+                if (domain != ModelDomain.ASR) {
+                    missing.add(domain.getValue());   // llm/tts gate; asr silently falls back
+                }
+                continue;
+            }
+            String apiKey = cfg.getApiKeyCipher() != null ? apiKeyCipher.decrypt(cfg.getApiKeyCipher()) : null;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("provider", cfg.getProvider());
+            m.put("base_url", cfg.getBaseUrl());
+            m.put("api_key", apiKey);
+            m.put("model", cfg.getModel());
+            if (cfg.getVoice() != null) {
+                m.put("voice", cfg.getVoice());
+            }
+            m.put("config_hash", configHash(cfg));
+            byok.put(domain.getValue(), m);
+
+            Map<String, Object> s = new LinkedHashMap<>();
+            s.put("config_id", cfg.getId());
+            s.put("provider", cfg.getProvider());
+            s.put("model", cfg.getModel());
+            if (cfg.getVoice() != null) {
+                s.put("voice", cfg.getVoice());
+            }
+            snapshot.put(domain.getValue(), s);
+        }
+        if (!missing.isEmpty()) {
+            throw new AurisException(AIErrorCode.MODEL_CONFIG_REQUIRED,
+                    "missing or unverified model config: " + String.join(",", missing));
+        }
+        return new DubbingGrant(byok, JsonUtils.toJson(snapshot));
+    }
+
+    private String configHash(UserModelConfigDO cfg) {
+        String cipherB64 = cfg.getApiKeyCipher() == null
+                ? "" : Base64.getEncoder().encodeToString(cfg.getApiKeyCipher());
+        String material = String.join("|",
+                nullToEmpty(cfg.getProvider()), nullToEmpty(cfg.getBaseUrl()),
+                nullToEmpty(cfg.getModel()), nullToEmpty(cfg.getVoice()), cipherB64);
+        return DigestUtils.md5DigestAsHex(material.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
     }
 }

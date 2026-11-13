@@ -3,7 +3,7 @@
  *
  *   GET  /v1/byok/list             列表(掩码回显)
  *   POST /v1/byok/save             保存(body 带 domain;落库即密文,换 key/换接入点才重置 unverified)
- *   POST /v1/byok/validate?domain= 连通性校验(engine 实测;llm 已通,tts/asr 待 engine 落地)
+ *   POST /v1/byok/validate?domain= 连通性校验(engine 实测;三域均已上线 P13 D3)
  *   POST /v1/byok/delete?domain=   删除
  */
 
@@ -104,13 +104,9 @@ export function saveConfig(domain: ModelDomain, draft: ConfigDraft): Promise<boo
 
 /**
  * POST /v1/byok/validate?domain=xx —— engine 实测连通性,ai 侧回写 verified/failed。
- * llm 域已通(engine _PROBES 仅注册 llm);tts/asr 待 engine 侧落地,先显式拦住——
- * 否则 engine KeyError 兜底会被误解为"配置校验失败"
+ * 三域均已上线(P13 D3,2026-11-11):llm 拉模型列表+1token 补全;tts 合成样音;asr 识别 1s 静音。
  */
 export async function validateConfig(domain: ModelDomain): Promise<boolean> {
-  if (domain !== 'llm') {
-    throw new Error('该域校验暂未上线(engine 待支持)')
-  }
   return request<boolean>(`/v1/byok/validate?domain=${domain}`, { method: 'POST' })
 }
 

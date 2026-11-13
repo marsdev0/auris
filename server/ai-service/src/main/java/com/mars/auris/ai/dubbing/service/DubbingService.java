@@ -5,6 +5,8 @@ package com.mars.auris.ai.dubbing.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.mars.auris.ai.byok.model.DubbingGrant;
+import com.mars.auris.ai.byok.service.ByokService;
 import com.mars.auris.ai.dubbing.entity.DubbingTaskDO;
 import com.mars.auris.ai.dubbing.enums.DubbingKind;
 import com.mars.auris.ai.dubbing.enums.DubbingTaskStatus;
@@ -37,6 +39,7 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -84,7 +87,12 @@ public class DubbingService {
     @Autowired
     private StorageProperties storageProperties;
 
+    @Autowired
+    private ByokService byokService;
+
     public SubmitTaskResp submitUrl(Long userId, String url) {
+        DubbingGrant grant = byokService.resolveForDubbing(userId);
+
         // Insert first (INIT) then call engine: the task lifecycle starts at "user submission"; engine-accept failures also leave a trace.
         // Oversized url is rejected at the entry by @Size(max=1024); no truncation here so the hash shares the same source as the stored value.
         DubbingKind kind = guessKind(url);
@@ -96,6 +104,7 @@ public class DubbingService {
         task.setStatus(DubbingTaskStatus.INIT.getCode());
         task.setStageIndex(0);
         task.setStageTotal(kind.getStageTotal());
+        task.setConfigSnapshot(grant.getSnapshot());
         try {
             // Idempotency by unique-key fallback, no check-then-insert (concurrency window): one row per user+url for life
             mapper.insert(task);
@@ -112,10 +121,13 @@ public class DubbingService {
             return new SubmitTaskResp(String.valueOf(existed.getId()));
         }
         try {
+            Map<String, Object> body = new HashMap<>();
+            body.put("url", url);
+            body.put("byok", grant.getEngineByok());
             EngineResp<JsonNode> result = callEngine(() -> engineSubmit.post()
                     .uri(URL_DUB_SUBMIT)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("url", url))
+                    .body(body)
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {
                     }));
@@ -327,6 +339,7 @@ public class DubbingService {
         r.setStageTotal(t.getStageTotal());
         r.setAudioBytes(t.getAudioBytes());
         r.setError(t.getErrorMsg());
+        r.setConfigSnapshot(t.getConfigSnapshot());
         r.setCreatedAt(t.getCreatedAt());
         return r;
     }

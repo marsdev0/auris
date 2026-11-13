@@ -6,20 +6,32 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/** Dubbing task frontend projection (status as readable string, no lookup table needed in templates). */
+/**
+ * Dubbing task frontend projection (status as readable string, no lookup table needed in templates).
+ */
 @Data
 public class DubbingTaskResp {
-    /** Always String (P3 rule: snowflake ids exceed JS 2^53) */
+    /**
+     * Always String (P3 rule: snowflake ids exceed JS 2^53)
+     */
     private String id;
     private String title;
     private String url;
-    /** audio|video */
+    /**
+     * audio|video
+     */
     private String kind;
-    /** init|running|completed|failed */
+    /**
+     * init|running|completed|failed
+     */
     private String status;
     private Integer stageIndex;
     private Integer stageTotal;
     private Long audioBytes;
     private String error;
+    /**
+     * BYOK config snapshot JSON: which config/model this run used; null on legacy rows
+     */
+    private String configSnapshot;
     private LocalDateTime createdAt;
 }
