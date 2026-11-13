@@ -2,14 +2,14 @@ import time
 
 from fastapi import APIRouter
 
-from engine.byok.probes import probe_llm
+from engine.byok.probes import probe_llm, probe_tts, probe_asr
 from engine.byok.schemas import ValidateReq, ByokConfigError, ByokProbeError, ValidateResp
 from engine.net.safety import assert_public_url, UrlSafetyError
 from loguru import logger
 
 router = APIRouter(prefix="/byok", tags=["byok"])
 
-_PROBES = {"llm": probe_llm}
+_PROBES = {"llm": probe_llm, "tts": probe_tts, "asr": probe_asr}
 
 @router.post("/validate")
 async def validate(req: ValidateReq) -> dict:

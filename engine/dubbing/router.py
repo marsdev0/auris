@@ -3,6 +3,7 @@ import re
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
+from engine.byok.schemas import ByokContext
 from engine.dubbing import tasks
 from engine.dubbing.tasks import DubStatus
 
@@ -13,13 +14,14 @@ _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
 class SubmitReq(BaseModel):
     url: str
+    byok: ByokContext | None = None
 
 
 @router.post("/task", status_code=202)
 async def submit(req: SubmitReq):
     if not req.url.strip():
         return {"code": 1, "message": "url 不能为空", "data": None}
-    task_id = await tasks.submit(req.url)
+    task_id = await tasks.submit(req.url, byok=req.byok)
     return {"code": 0, "message": "success", "data": {"task_id": task_id}}
 
 

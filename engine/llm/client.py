@@ -14,6 +14,7 @@ Policies:
 import asyncio
 import random
 import time
+from dataclasses import dataclass
 
 import httpx
 from loguru import logger
@@ -28,6 +29,11 @@ _BACKOFF_S = 1.0
 
 class LlmError(Exception):
     """LLM call failure (including unconfigured)."""
+
+@dataclass
+class LlmEndpoint:
+    client: AsyncOpenAI
+    model: str | None = None
 
 
 class LlmClient:
@@ -46,15 +52,16 @@ class LlmClient:
         return self._client
 
     async def llm_chat(self, messages: list[dict], *, model: str | None = None,
-                       temperature: float = 0.1, json_mode: bool = False) -> str:
+                       temperature: float = 0.1, json_mode: bool = False,
+                       endpoint: LlmEndpoint | None = None) -> str:
         """One chat call, returns the first choice text.
 
         Without model, uses LLM.MODEL (platform default); an external model (e.g. BYOK user model)
         takes precedence. temperature defaults to 0.1 (numbered batch translation is temperature-sensitive); json_mode
         requests JSON output; endpoints without response_format support get the param dropped and one retry (compat first).
         """
-        client = self._ensure()
-        use_model = model or LLM.MODEL
+        client = endpoint.client if endpoint else self._ensure()
+        use_model = (endpoint.model if endpoint else None) or model or LLM.MODEL
         if not use_model:
             raise LlmError("未指定 model 且未配置 LLM_MODEL(默认模型)")
         use_json = json_mode

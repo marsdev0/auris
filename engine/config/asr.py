@@ -19,7 +19,7 @@ class AsrSettings:
 
     QWEN3_BASE_URL = os.getenv("ASR_QWEN3_BASE_URL", "http://127.0.0.1:28000/v1")
     QWEN3_API_KEY = os.getenv("ASR_QWEN3_API_KEY", "123456")
-    QWEN3_MODEL = os.getenv("ASR_QWEN3_MODEL", "Qwen3-ASR-1.7B-4bit")
+    QWEN3_MODEL = os.getenv("ASR_QWEN3_MODEL", "")
 
     # ------ Long-audio segmentation ------
     SEG_TARGET_MIN_S = int(os.getenv("ASR_SEG_TARGET_MIN_S", "10"))  # min segment length

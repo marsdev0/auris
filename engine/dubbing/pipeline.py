@@ -13,6 +13,9 @@ from engine.asr.long_audio.assembler import Assembler
 from engine.asr.long_audio.scheduler import Scheduler
 from engine.asr.long_audio.segmenter import Segmenter
 from engine.asr.service import get_asr_service
+from engine.byok.cache import get_user_provider_cache
+from engine.byok.factory import build_asr_provider, build_tts_provider, build_llm_client
+from engine.byok.schemas import ByokContext
 from engine.config import ASR, DUB
 from engine.dubbing import align, tasks
 from engine.dubbing import checkpoint as ckp
@@ -23,11 +26,45 @@ from engine.dubbing.concat import concat_mp3
 from engine.dubbing.mux import mux
 from engine.dubbing.tasks import DubStatus
 from engine.dubbing.types import Seg, Stage, VStage
+from engine.llm.client import LlmEndpoint
 from engine.tts.service import get_tts_service
 from engine.storage import s3 as storage
 
 # _SR = ASR.SAMPLE_RATE
 _TTS_RETRY = 3
+
+
+async def _byok_asr_provider(byok: ByokContext | None):
+    if not (byok and byok.asr):
+        return None
+    cfg = byok.asr
+    return await get_user_provider_cache().get_or_build(
+        byok.user_id,
+        "asr",
+        cfg.config_hash,
+        lambda: build_asr_provider(cfg))
+
+
+async def _byok_tts_provider(byok: ByokContext | None):
+    if not (byok and byok.tts):
+        return None
+    cfg = byok.tts
+    return await get_user_provider_cache().get_or_build(
+        byok.user_id,
+        "tts",
+        cfg.config_hash,
+        lambda: build_tts_provider(cfg))
+
+
+async def _byok_llm_endpoint(byok: ByokContext | None) -> LlmEndpoint | None:
+    if not (byok and byok.llm):
+        return None
+    cfg = byok.llm
+    return await get_user_provider_cache().get_or_build(
+        byok.user_id,
+        "llm",
+        cfg.config_hash,
+        lambda: LlmEndpoint(client=build_llm_client(cfg, probe=False), model=cfg.model))
 
 
 def _fail(task_id: str, url: str, title: str | None, e: Exception, kind: str = "audio") -> None:
@@ -46,7 +83,7 @@ def _fail(task_id: str, url: str, title: str | None, e: Exception, kind: str = "
         pass  # persist failure must not mask the original error
 
 
-async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> None:
+async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD, byok: ByokContext | None = None) -> None:
     """Task runner; any stage exception -> failed"""
     from engine.sources import fetch_source
     from engine.sources.base import SourceError
@@ -73,7 +110,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
         if start_stage <= Stage.TRANSCRIBE:
             tasks.set(task_id, stage_index=int(Stage.TRANSCRIBE))
             audio = (tdir / "src.bin").read_bytes()
-            units = await _transcribe(audio, task_id)
+            units = await _transcribe(audio, task_id, await _byok_asr_provider(byok))
             ckp.write_stage_data(task_id, Stage.TRANSLATE, units)
             ckp.save_checkpoint(
                 task_id, url=url, stage_index=int(Stage.TRANSLATE), title=title
@@ -85,7 +122,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
         # 3. translate → translation.json (Chinese segments; Chinese sources pass through internally)
         if start_stage <= Stage.TRANSLATE:
             tasks.set(task_id, stage_index=int(Stage.TRANSLATE))
-            units = await tsl.translate(units)
+            units = await tsl.translate(units, endpoint=await _byok_llm_endpoint(byok))
             ckp.write_stage_data(task_id, Stage.CHUNK, units)
             ckp.save_checkpoint(
                 task_id, url=url, stage_index=int(Stage.CHUNK), title=title
@@ -111,7 +148,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
             tasks.set(task_id, stage_index=int(Stage.SYNTH))
             out_dir = tdir / "chunks"
             out_dir.mkdir(parents=True, exist_ok=True)
-            provider = get_tts_service().get()
+            provider = (await _byok_tts_provider(byok)) or get_tts_service().get()
             for i, text in enumerate(units_out):
                 result = await _synth_with_retry(provider, text)
                 (out_dir / f"{i:04d}.mp3").write_bytes(result.audio)
@@ -152,9 +189,9 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD) -> N
         logger.error(f"播报任务 {task_id} 失败: {e}")
 
 
-async def _transcribe(audio: bytes, task_id: str) -> list[str]:
+async def _transcribe(audio: bytes, task_id: str, asr_provider=None) -> list[str]:
     """Audio bytes -> narration segment text list. Dual path reuses the asr domain (isomorphic to long_audio/tasks.py::_run)."""
-    provider = get_asr_service().get(None)
+    provider = asr_provider or get_asr_service().get(None)
 
     y = await asyncio.to_thread(load_audio, audio)
     duration = len(y) / ASR.SAMPLE_RATE
@@ -190,9 +227,9 @@ async def _synth_with_retry(provider, text: str):
     raise RuntimeError(f"TTS 重试耗尽: {last}")
 
 
-async def _transcribe_seg(audio: bytes, task_id: str) -> list[Seg]:
+async def _transcribe_seg(audio: bytes, task_id: str, asr_provider=None) -> list[Seg]:
     """Seg variant of _transcribe: audio bytes -> sentence-level timestamped segments"""
-    provider = get_asr_service().get(None)
+    provider = asr_provider or get_asr_service().get(None)
     y = await asyncio.to_thread(load_audio, audio)
     duration = len(y) / ASR.SAMPLE_RATE
     if duration > ASR.LONG_MAX_DURATION_S:
@@ -207,7 +244,7 @@ async def _transcribe_seg(audio: bytes, task_id: str) -> list[Seg]:
                 for s in res.segments
                 if s.text.strip()
             ]
-        if not res.text.strip():   # empty-transcript fail-fast: no empty Seg, no wasted run to the artifact (lesson 2026-10-25)
+        if not res.text.strip():  # empty-transcript fail-fast: no empty Seg, no wasted run to the artifact (lesson 2026-10-25)
             raise RuntimeError("ASR 返回空文本(音频格式不支持或无语音)")
         return [
             Seg(text=res.text.strip(), start=0.0, end=round(duration, 3))
@@ -242,7 +279,7 @@ async def _transcribe_seg(audio: bytes, task_id: str) -> list[Seg]:
     return out
 
 
-async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLOAD) -> None:
+async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLOAD, byok: ByokContext | None = None) -> None:
     from engine.sources import fetch_source
 
     prev = ckp.load_checkpoint(task_id)
@@ -282,7 +319,7 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
         # 3. transcribe
         if start_stage <= VStage.TRANSCRIBE:
             tasks.set(task_id, stage_index=int(VStage.TRANSCRIBE))
-            segs = await _transcribe_seg((tdir / "audio.mp3").read_bytes(), task_id)
+            segs = await _transcribe_seg((tdir / "audio.mp3").read_bytes(), task_id, await _byok_asr_provider(byok))
             ckp.write_segs(task_id, "transcript.json", segs)
             ckp.save_checkpoint(
                 task_id,
@@ -297,7 +334,7 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
         # 4. translate
         if start_stage <= VStage.TRANSLATE:
             tasks.set(task_id, stage_index=int(VStage.TRANSLATE))
-            segs = await tsl.translate_segs(segs)
+            segs = await tsl.translate_segs(segs, endpoint=await _byok_llm_endpoint(byok))
             ckp.write_segs(task_id, "translation.json", segs)
             ckp.save_checkpoint(task_id, url=url, stage_index=int(VStage.RESPLIT),
                                 title=title, kind="video")
@@ -318,7 +355,7 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
             tasks.set(task_id, stage_index=int(VStage.SYNTH))
             out_dir = tdir / "chunks"
             out_dir.mkdir(parents=True, exist_ok=True)
-            provider = get_tts_service().get()
+            provider = (await _byok_tts_provider(byok)) or get_tts_service().get()
             for i, u in enumerate(units):
                 result = await _synth_with_retry(provider, tl.clean_for_tts(u.text))
                 (out_dir / f"{i:04d}.mp3").write_bytes(result.audio)
@@ -331,9 +368,9 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
             (tdir / "align_report.json").write_text(json.dumps(speed_log, ensure_ascii=False))
             tl.write_srt(new_times, [u.text for u in units], tdir / "dub.srt")
             align.rebuild_track([tdir / "aligned" / f"{i:04d}.wav" for i in range(len(units))],
-                          new_times, tdir / "dub_track.wav")
+                                new_times, tdir / "dub_track.wav")
             ckp.save_checkpoint(task_id, url=url, stage_index=int(VStage.MUX),
-                                 title=title, kind="video")
+                                title=title, kind="video")
 
         tasks.set(task_id, stage_index=int(VStage.MUX))
         out = tdir / "output.mp4"

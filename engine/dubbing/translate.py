@@ -16,10 +16,10 @@ from loguru import logger
 
 from engine.dubbing.timeline import target_chars
 from engine.dubbing.types import Seg
-from engine.llm.client import get_llm_client
+from engine.llm.client import get_llm_client, LlmEndpoint
 
-_CJK_RATIO = 0.30          # CJK ratio threshold: above → Chinese source, skip translation
-_BATCH_CHAR_LIMIT = 3000   # batching char cap: 300 segments ≈ 10 batches, segments within a batch contextualize each other
+_CJK_RATIO = 0.30  # CJK ratio threshold: above → Chinese source, skip translation
+_BATCH_CHAR_LIMIT = 3000  # batching char cap: 300 segments ≈ 10 batches, segments within a batch contextualize each other
 
 _SYSTEM_PROMPT = (
     "你是技术视频字幕译者,英译中。规则:①忠实原意,口语化,适合朗读;"
@@ -159,10 +159,11 @@ def _parse_translations(raw: str, batch: list[tuple[int, str]]) -> list[tuple[in
     return out
 
 
-async def _translate_batch(batch: list[tuple[int, str]]) -> list[tuple[int, str]]:
+async def _translate_batch(batch: list[tuple[int, str]],
+                           endpoint: LlmEndpoint | None = None) -> list[tuple[int, str]]:
     """Single batch: prompt -> llm_chat(json_mode) -> parse & backfill. Batch failure raises (degraded upstream)."""
     raw = await get_llm_client().llm_chat(_build_messages(batch),
-                                          temperature=0.1, json_mode=True)
+                                          temperature=0.1, json_mode=True, endpoint=endpoint)
     logger.debug(f"批原始输出预览: {raw[:120]!r}")
     pairs = _parse_translations(raw, batch)
     if all(not t for _, t in pairs):
@@ -170,7 +171,7 @@ async def _translate_batch(batch: list[tuple[int, str]]) -> list[tuple[int, str]
     return pairs
 
 
-async def _translate_single(idx: int, text: str) -> tuple[int, str]:
+async def _translate_single(idx: int, text: str, endpoint: LlmEndpoint | None = None) -> tuple[int, str]:
     """Degraded path: direct single-segment translation (no numbered protocol).
 
     llm_chat already has 3 exponential-backoff retries built in; another layer here would mean 9 calls —
@@ -182,11 +183,11 @@ async def _translate_single(idx: int, text: str) -> tuple[int, str]:
         {"role": "system", "content": _SINGLE_SYSTEM_PROMPT},
         {"role": "user", "content": text},
     ]
-    raw = await get_llm_client().llm_chat(msgs, temperature=0.1)
+    raw = await get_llm_client().llm_chat(msgs, temperature=0.1, endpoint=endpoint)
     return idx, raw.strip()
 
 
-async def translate_segs(segs: list[Seg]) -> list[Seg]:
+async def translate_segs(segs: list[Seg], *, endpoint: LlmEndpoint | None = None) -> list[Seg]:
     """D5 video tasks: English Seg[] -> Chinese Seg[] (translation backfilled into original windows, window constraint in prompt).
 
     Coexists with translate() (audio, str version): batching/numbered alignment/tolerant degradation chain reused,
@@ -206,14 +207,14 @@ async def translate_segs(segs: list[Seg]) -> list[Seg]:
         span = f"{batch[0][0]}~{batch[-1][0]}"
         logger.info(f"批 {bi + 1}/{len(batches)} 开始: 段 {span}, 带窗约束")
         try:
-            results.update(await _translate_batch_seg(items, batch))
+            results.update(await _translate_batch_seg(items, batch, endpoint))
             logger.info(f"批翻译 {bi + 1}/{len(batches)} 完成({len(batch)} 段,带窗)")
         except Exception as e:
             logger.warning(f"批 {bi + 1}/{len(batches)} 失败({e}),降级逐段")
             for i, text in batch:
                 logger.info(f"段 {i} 直翻(降级): {text[:40]!r}")
                 try:
-                    _, t = await _translate_single(i, text)
+                    _, t = await _translate_single(i, text, endpoint)
                 except Exception as se:
                     raise RuntimeError(f"段 {i} 翻译失败(批降级后仍失败): {se}") from se
                 results[i] = t
@@ -223,13 +224,14 @@ async def translate_segs(segs: list[Seg]) -> list[Seg]:
             for i in range(len(segs))]
 
 
-async def _translate_batch_seg(items: list[str], batch: list[tuple[int, str]]) -> list[tuple[int, str]]:
+async def _translate_batch_seg(items: list[str], batch: list[tuple[int, str]],
+                               endpoint: LlmEndpoint | None = None) -> list[tuple[int, str]]:
     """Seg-variant single batch: windowed prompt -> llm_chat(json_mode) -> parse & backfill (reuses D4 parse chain)."""
     msgs = [
         {"role": "system", "content": _SYSTEM_PROMPT_SEG},
         {"role": "user", "content": json.dumps(items, ensure_ascii=False)},
     ]
-    raw = await get_llm_client().llm_chat(msgs, temperature=0.1, json_mode=True)
+    raw = await get_llm_client().llm_chat(msgs, temperature=0.1, json_mode=True, endpoint=endpoint)
     logger.debug(f"批原始输出预览: {raw[:120]!r}")
     pairs = _parse_translations(raw, batch)
     if all(not t for _, t in pairs):
@@ -237,7 +239,7 @@ async def _translate_batch_seg(items: list[str], batch: list[tuple[int, str]]) -
     return pairs
 
 
-async def translate(units: list[str]) -> list[str]:
+async def translate(units: list[str], *, endpoint: LlmEndpoint | None = None) -> list[str]:
     """Stage ③ entry: English segment list -> Chinese segment list (§4.2).
 
     Chinese sources pass through; English go batch translation, batch failure degrades per-segment, segment exhaustion propagates.
@@ -255,14 +257,14 @@ async def translate(units: list[str]) -> list[str]:
         logger.info(f"批 {bi + 1}/{len(batches)} 开始: 段 {span}, "
                     f"{sum(len(t) for _, t in batch)} 字符")
         try:
-            results.update(await _translate_batch(batch))
+            results.update(await _translate_batch(batch, endpoint))
             logger.info(f"批翻译 {bi + 1}/{len(batches)} 完成({len(batch)} 段)")
         except Exception as e:
             logger.warning(f"批 {bi + 1}/{len(batches)} 失败({e}),降级逐段")
             for i, text in batch:
                 logger.info(f"段 {i} 直翻(降级): {text[:40]!r}")
                 try:
-                    _, t = await _translate_single(i, text)
+                    _, t = await _translate_single(i, text, endpoint)
                 except Exception as se:
                     raise RuntimeError(f"段 {i} 翻译失败(批降级后仍失败): {se}") from se
                 results[i] = t

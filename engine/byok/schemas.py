@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Domain = Literal["llm", "tts", "asr"]
 
@@ -27,5 +27,32 @@ class ByokProbeError(Exception):
 class LlmConfig(BaseModel):
     provider: str
     base_url: str | None = None
-    api_key: str | None = None
+    # repr=False:任何日志/异常栈零明文(api_key 同理,见 feature 分支纪律)
+    api_key: str | None = Field(default=None, repr=False)
     model: str | None = None
+    config_hash: str = Field(default="", repr=False)  # 缓存键成分,恒为非空摘要
+
+
+class TtsConfig(BaseModel):
+    provider: str
+    base_url: str | None = None
+    api_key: str | None = Field(default=None, repr=False)
+    model: str | None = None
+    voice: str | None = None
+    config_hash: str = Field(default="", repr=False)
+
+
+class AsrConfig(BaseModel):
+    provider: str
+    base_url: str | None = None
+    api_key: str | None = Field(default=None, repr=False)
+    model: str | None = None
+    config_hash: str = Field(default="", repr=False)
+
+
+
+class ByokContext(BaseModel):
+    user_id: int
+    llm: LlmConfig | None = None
+    tts: TtsConfig | None = None
+    asr: AsrConfig | None = None
