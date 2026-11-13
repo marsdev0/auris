@@ -16,6 +16,7 @@ public enum AIErrorCode implements ErrorCode {
     AUDIO_INVALID(400, 400_101, "Audio content is empty or failed to decode"),
     TASK_NOT_FOUND(404, 404_101, "Task not found or expired"),
     RECORD_NOT_FOUND(404, 404_102, "Record not found"),
+    MODEL_CONFIG_REQUIRED(403, 403_101, "Dubbing requires verified LLM/TTS model configs (BYOK), please configure them in settings"),
     ENGINE_ERROR(502, 502_101, "Transcription engine internal error"),
     ENGINE_UNAVAILABLE(503, 503_101, "Transcription engine temporarily unavailable, please retry later");
 

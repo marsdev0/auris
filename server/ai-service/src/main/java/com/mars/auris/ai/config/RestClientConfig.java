@@ -47,7 +47,7 @@ public class RestClientConfig {
     public RestClient engineByokRestClient(RestClient.Builder builder) {
         return builder
                 .baseUrl(properties.getBaseUrl())
-                .requestFactory(httpComponents(Duration.ofSeconds(3), Duration.ofSeconds(15)))
+                .requestFactory(httpComponents(Duration.ofSeconds(3), Duration.ofSeconds(35)))
                 .build();
     }
 

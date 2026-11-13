@@ -18,6 +18,12 @@ public class DubbingTaskDO {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
+    /**
+     * BYOK config snapshot: per-domain config_id/provider/model JSON, no api_key.
+     * Answers "which config did this run use" after the user edits/deletes configs.
+     */
+    private String configSnapshot;
+
     /** Submitting user, data isolation key */
     private Long userId;
 
