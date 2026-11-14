@@ -28,7 +28,7 @@
 
 ## 代码与提交规范
 
-- 注释、文档用中文；标识符、commit message 用英文。
+- 注释、文档、commit message 一律英文（开源项目规范）；面向用户的错误消息保持英文。
 - commit 遵循 Conventional Commits，scope 按模块：`ai` / `push` / `user` / `gateway` / `web`（前端）/ `engine` / `asr` / `common`。
 - 一次提交只做一件事；跨服务的改动按服务拆成多个 commit。
 - Java：Spring Boot 3 + MyBatis-Plus，DO/Mapper/Service/Controller 分层，参考各服务现有结构。
