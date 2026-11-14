@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 from engine.asr.provider import AsrCapability
 from engine.asr.schemas import AsrResult, PartialResult, AsrSegment, AsrWord
 from engine.config import ASR
+from loguru import logger
 
 # OpenAI 兼容接口按文件名后缀识别音频格式，统一按 wav 上送
 _UPLOAD_FILENAME = "audio.wav"
@@ -16,14 +17,19 @@ _UPLOAD_FILENAME = "audio.wav"
 class Qwen3AsrProvider:
     name = "qwen3-asr"
     capabilities: set[AsrCapability] = set()  # HTTP转写，无真流式
+    max_segment_s: int | None = None  # 类默认:平台 omlx 本地无限制 → 600 兜底
 
     def __init__(self, base_url: str | None = None, api_key: str | None = None,
-                 model: str | None = None):
+                 model: str | None = None, max_segment_s: int | None = None):
+        # SDK 要求 key 非空;平台默认未配置(出站默认值已全空)时用占位符构造成功,
+        # 真实调用时才会 401 快速失败——「不配=不可用」而非「启动即崩/静默打官方」
         self._client = AsyncOpenAI(
             base_url=base_url or ASR.QWEN3_BASE_URL,
-            api_key=api_key or ASR.QWEN3_API_KEY
+            api_key=api_key or ASR.QWEN3_API_KEY or "EMPTY"
         )
         self._model = model or ASR.QWEN3_MODEL
+        if max_segment_s is not None:
+            self.max_segment_s = max_segment_s
 
     async def transcribe(self, audio: bytes, lang: str | None = None) -> AsrResult:
         buf = io.BytesIO(audio)
@@ -44,11 +50,13 @@ class Qwen3AsrProvider:
             )
             for s in (getattr(resp, "segments", None) or [])
         ]
-        return AsrResult(
+        asr_result = AsrResult(
             text=resp.text,
             segments=segs,
             language=getattr(resp, "language", None)
         )
+        logger.info(f"Qwen3AsrProvider transcribe: {asr_result}")
+        return asr_result
 
     async def stream(self, chunks: AsyncIterator[bytes], lang: str | None = None) -> AsyncIterator[PartialResult]:
         raise NotImplementedError("qwen3-asr provider 不支持真流式")

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 marsdev0
+# Licensed under the MIT License. See the LICENSE file for details.
 import httpx
 from openai import AsyncOpenAI
 
@@ -67,9 +69,19 @@ def build_tts_provider(cfg: TtsConfig):
         return OpenAITtsProvider(cfg)
     raise ByokConfigError(f"tts provider 暂不支持: {cfg.provider}")
 
-def build_asr_provider(cfg: AsrConfig) -> Qwen3AsrProvider:
+# 各 BYOK provider 的单次转写上限(P13-D1):deepseek 自带类声明;
+# glm 复用 Qwen3AsrProvider 且文档硬限 30s,必须构造注入;
+# 其余端点未知 → None 走全局兑底(与前端能力标签/ai 白名单三方同源)
+_BYOK_MAX_SEGMENT_S = {"glm": 25}
+
+
+def build_asr_provider(cfg: AsrConfig):
     if not cfg.base_url:
         raise ByokConfigError("asr 域必须填写 base_url")
     _gate(cfg.base_url)
+    if cfg.provider == "deepseek":
+        from engine.asr.providers.deepseek import DeepSeekAsrProvider
+        return DeepSeekAsrProvider(cfg.base_url, cfg.api_key)
     return Qwen3AsrProvider(base_url=cfg.base_url, api_key=cfg.api_key,
-                            model=cfg.model)
+                            model=cfg.model,
+                            max_segment_s=_BYOK_MAX_SEGMENT_S.get(cfg.provider))
