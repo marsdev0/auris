@@ -28,20 +28,18 @@ class DeepSeekAsrProvider:
     async def transcribe(self, audio: bytes, lang: str | None = None) -> AsrResult:
         # 1秒音频 = 16kHz 采样率 * 16bit（2字节）* 单声道 = 每秒 32000 字节
         if len(audio) > self.max_segment_s * 32000:
-            raise RuntimeError(f"deepseek asr 超限:约 {len(audio) / 32000:.0f}s > "
-                               f"{self.max_segment_s}s,应由管线分段后调用")
-
-        last: Exception | None = None
+            raise RuntimeError(f"deepseek asr exceeds limit: ~{len(audio) / 32000:.0f}s > "
+                               f"{self.max_segment_s}s, pipeline should have segmented before calling")
         for attempt in (1, 2):
             try:
                 resp = await self._client.post(
                     self._url,
                     headers={"Authorization": f"Bearer {self._key}"},
-                    files={"file": ("audio.wav", audio, "audio/wav")})
+                    files={"file": ("audio.wav", audio, "audio/wav")}) # 文件、内容、MIME类型
 
                 if resp.status_code in _RETRYABLE and attempt == 1:
                     last = RuntimeError(
-                        f"deepseek asr {resp.status_code}(可重试): {resp.text[:200]}")
+                        f"deepseek asr {resp.status_code}(retryable): {resp.text[:200]}")
                     logger.warning(f"deepseek asr attempt 1 failed: {last}, retry once")
                     await asyncio.sleep(1)
                     continue
@@ -63,8 +61,8 @@ class DeepSeekAsrProvider:
                     logger.warning(f"deepseek asr network error, retry once: {e}")
                     await asyncio.sleep(1)
                     continue
-                raise RuntimeError(f"deepseek asr 网络错误(重试后仍失败): {e}") from e
-        raise RuntimeError(f"deepseek asr 重试耗尽: {last}")
+                raise RuntimeError(f"deepseek asr network error (still failing after retry): {e}") from e
+        raise RuntimeError(f"deepseek asr retries exhausted: {last}")
 
     async def stream(self, chunks: AsyncIterator[bytes], lang: str | None = None) -> AsyncIterator[PartialResult]:
-        raise NotImplementedError("deepseek-asr 不支持真流式")
+        raise NotImplementedError("deepseek-asr does not support streaming")

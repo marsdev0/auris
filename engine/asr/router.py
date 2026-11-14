@@ -54,8 +54,8 @@ async def transcribe(audio: UploadFile, provider: str | None = Form(None)):
 
 @router.get("/gate/stats")
 async def gate_stats():
-    """调度闸门观测(P8 §5.6):模式/队列深度/在途/按 kind 的 wait、hold 分位数。
-    hold_ms 是下游单容量的侧写,直接反哺 P10 定 M。"""
+    """调度闸门观测:模式/队列深度/在途/按 kind 的 wait、hold 分位数。
+    hold_ms 是下游单容量的侧写,用于定 M。"""
     return {"code": 0, "message": "success", "data": gate.stats()}
 
 
@@ -118,7 +118,7 @@ async def asr_stream(ws: WebSocket):
                 elif msg.get("bytes"):
                     await audio_q.put(msg["bytes"])
         except WebSocketDisconnect:
-            logger.info("真流式客户端断连,投哨兵收尾云会话")
+            logger.info("true-streaming client disconnected, sending sentinel to close cloud session")
             pass
         finally:
             # 手动设置哨兵，_pipe就会结束，不至于一直卡在audio_q.get()
@@ -130,11 +130,11 @@ async def asr_stream(ws: WebSocket):
             await ws.send_text(r.model_dump_json())
     except WebSocketDisconnect:
         # 客户端已断，错误帧无处可发，直接走到finally
-        logger.info("真流式收尾: 客户端断连(发送路径), 静默关闭")
+        logger.info("true-streaming finalize: client disconnected (send path), closing silently")
         pass
     except Exception as e:
         # 原异常先落日志——except 里再抛的新异常会顶掉它,先记下来才不会丢病因
-        logger.warning(f"WS /asr/stream 真流式异常: {e}")
+        logger.warning(f"WS /asr/stream true-streaming error: {e}")
         try:
             await ws.send_text(json.dumps({
                 "type": "error",
@@ -143,7 +143,7 @@ async def asr_stream(ws: WebSocket):
             }))
         except Exception as send_err:
             # 客户端恰好也断了，错误帧发不出去——不算新错误,只 log,别让二次异常顶掉原异常
-            logger.info(f"错误帧发送失败(客户端已断): {send_err}")
+            logger.info(f"error frame send failed (client gone): {send_err}")
     finally:
         reader.cancel()
 

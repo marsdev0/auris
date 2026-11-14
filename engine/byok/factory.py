@@ -69,7 +69,7 @@ def build_tts_provider(cfg: TtsConfig):
         return OpenAITtsProvider(cfg)
     raise ByokConfigError(f"tts provider 暂不支持: {cfg.provider}")
 
-# 各 BYOK provider 的单次转写上限(P13-D1):deepseek 自带类声明;
+# 各 BYOK provider 的单次转写上限:deepseek 自带类声明;
 # glm 复用 Qwen3AsrProvider 且文档硬限 30s,必须构造注入;
 # 其余端点未知 → None 走全局兑底(与前端能力标签/ai 白名单三方同源)
 _BYOK_MAX_SEGMENT_S = {"glm": 25}

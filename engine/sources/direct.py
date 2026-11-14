@@ -7,11 +7,11 @@ import httpx
 from engine.sources.base import SourceResult, download_to_temp
 
 _AUDIO_EXT = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".aac", ".wma", ".opus"}
-_VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov"}   # D5:视频直链
+_VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov"}   # 视频直链
 _AUDIO_MIME_PREFIX = "audio/"
 
 def is_video_url(url: str) -> bool:
-    """视频直链判定(kind 预判 + fetch 分支共用,D5)。"""
+    """视频直链判定(kind 预判 + fetch 分支共用)。"""
     ext = PurePosixPath(urlparse(url).path).suffix.lower()
     return ext in _VIDEO_EXT
 

@@ -1,8 +1,8 @@
-"""Timeline domain (P12-D5 §4.1/4.2): estimator / four-state verdict / chunk planning / window split / srt.
+"""Timeline domain: estimator / four-state verdict / chunk planning / window split / srt.
 
-This file grew alongside D5 construction (order per plan §8 call tree); currently has target_chars,
+This file grew alongside video-dubbing construction; currently has target_chars,
 estimate/judge/plan_chunks/resplit/write_srt are to be implemented per appendix C.3.
-Algorithm provenance and borrowing discipline in D5 plan appendix B.
+Algorithm provenance and borrowing discipline are documented separately.
 """
 import re
 from pathlib import Path
@@ -10,7 +10,7 @@ from pathlib import Path
 from engine.config import DUB
 from engine.dubbing.types import Seg
 
-# Four-state verdict (appendix B.2-2): triage at estimation time, the cheapest layer solves the most
+# Four-state verdict: triage at estimation time, the cheapest layer solves the most
 NEED_TRIM, NEED_SPEED, SLOW, OK = 2, 1, -1, 0
 
 _PUNCT_MID = re.compile(r"[，；：、,;]")
@@ -24,7 +24,7 @@ _HYPHEN = re.compile(rf"(?<![{_LATIN}])-|-(?![{_LATIN}])")
 
 
 def target_chars(window_s: float) -> int:
-    """Target char count for a window (translation constraint, D5 §4.2): window × speech rate, 10% pause margin."""
+    """Target char count for a window (translation constraint): window × speech rate, 10% pause margin."""
     return max(4, int(window_s * DUB.CPS * 0.9))
 
 def estimate(text: str, cps: float | None = None) -> float:
@@ -32,7 +32,9 @@ def estimate(text: str, cps: float | None = None) -> float:
     Plain char count systematically underestimates; mid punctuation (comma-like) +0.1s, sentence-final +0.1s
     """
     cps = cps or DUB.CPS
+    # remove all whitespace characters from the text
     n = len(re.sub(r"\s", "", text))
+    # account for punctuation pauses: 0.1s per mark
     pauses = 0.1 * len(_PUNCT_MID.findall(text)) + 0.1 * len(_PUNCT_END.findall(text))
     return n / cps + pauses
 
@@ -99,9 +101,9 @@ def tol_of(u: Seg, gap: float) -> float:
 
 def judge(est: float, tol: float, duration: float) -> int:
     """Four states (appendix B.2-2). tol = duration + borrow allowance (see tol_of)."""
-    if est / DUB.SPEED_MAX > tol:
+    if est / DUB.SPEED_MAX > tol:  # 提速1.4倍后，还是超过tol，物理上无解了，只能截断
         return NEED_TRIM      # even max stretch cannot fit → trim
-    if est > tol:
+    if est > tol: # 超了，但是可挽救，需要提速
         return NEED_SPEED     # solvable by chunk-level stretch
     if est < duration - DUB.TOL:
         return SLOW           # slow: silence padding is enough, harmless
@@ -114,7 +116,7 @@ def plan_chunks(units: list[Seg]) -> list[list[int]]:
     flags = [judge(estimate(clean_for_tts(u.text)), t, u.end - u.start)
              for u, t in zip(units, tols)]
 
-    cut = [i for i, g in enumerate(gaps) if g >= DUB.TOL] + [len(units) - 1]
+    cut = [i for i, g in enumerate(gaps) if g >= DUB.TOL] + [len(units) - 1]  # cut是每一段的最后一个单元的下标列表
     chunks, start = [], 0
     for end in cut:
         i = start

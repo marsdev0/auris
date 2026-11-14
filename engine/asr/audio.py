@@ -8,23 +8,30 @@ import numpy as np
 import librosa
 
 from engine.config import ASR
+from loguru import logger
 
 
 def load_audio(data: bytes) -> np.ndarray:
-    """任意格式字节 → 解码 + 重采样到 16k mono np.float32(供 faster-whisper)。
+    """
+    Any-format audio bytes → decoded + resampled to 16k mono float32 (faster-whisper input).
+    Two-stage decode: soundfile (librosa default, zero process overhead, covers wav/mp3/ogg/flac)
+    → unknown containers (mp4/m4a/mkv video tracks) fall back to an ffmpeg subprocess emitting
+    raw PCM, which is re-wrapped with a WAV header and fed back to librosa — fully transparent
+    to callers.
 
-    两级解码:soundfile(librosa 默认,零进程开销,覆盖 wav/mp3/ogg/flac)
-    → 不认识的容器(mp4/m4a/mkv 等视频)走 ffmpeg 子进程兜底,输出裸 PCM
-    再自包 WAV 头喂回 librosa——对调用方完全透明。"""
+    Return: 采样点数组 - 每个元素是万分之一秒级别的一个声音采样值;
+    16kHZ、单声道、float32的一维数组
+    """
     try:
         y, _ = librosa.load(io.BytesIO(data), sr=ASR.SAMPLE_RATE, mono=True)
         return y.astype(np.float32)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"soundfile decode failed, falling back to ffmpeg: {e!r}")
         return _ffmpeg_decode(data)
 
 
 def _ffmpeg_decode(data: bytes) -> np.ndarray:
-    """ffmpeg 兜底:任意音视频容器 → 16k mono float32。系统需安装 ffmpeg。"""
+    """ffmpeg fallback: any audio/video container → 16k mono float32. Requires ffmpeg on PATH."""
     proc = subprocess.run(
         ["ffmpeg", "-hide_banner", "-loglevel", "error",
          "-i", "pipe:0",           # 从 stdin 读
@@ -33,17 +40,21 @@ def _ffmpeg_decode(data: bytes) -> np.ndarray:
         input=data, capture_output=True,
     )
     if proc.returncode != 0:
-        raise ValueError(f"音频解码失败(ffmpeg): {proc.stderr.decode(errors='ignore')[:200]}")
+        err = proc.stderr.decode(errors="ignore")[:200]
+        logger.error(f"audio decode failed (ffmpeg rc={proc.returncode}): {err}")
+        raise ValueError(f"audio decode failed by ffmpeg: {err}")
     y, _ = librosa.load(io.BytesIO(proc.stdout), sr=ASR.SAMPLE_RATE, mono=True)
     return y.astype(np.float32)
 
 
 def pcm_to_wav(pcm: bytes, sample_rate: int = ASR.SAMPLE_RATE) -> bytes:
-    """裸 PCM(16bit LE mono)→ WAV 容器字节。
-
-    流式切出的段没有文件头,而 provider.transcribe() 的契约是"任意格式字节"
-    (librosa 需要容器才能解码),送转写前包一层 44 字节的 WAV 头——
-    provider 协议保持不变,流式/非流式走同一条解码路径。"""
+    """
+    Raw PCM (16bit LE mono) → WAV container bytes.
+    Stream-cut segments carry no file header, while provider.transcribe() expects
+    "any-format bytes" (librosa needs a container to decode); prepend a 44-byte WAV
+    header before sending — provider protocol unchanged, streaming and non-streaming
+    share the same decode path.
+    """
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)          # mono

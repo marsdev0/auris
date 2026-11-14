@@ -1,7 +1,7 @@
 """
 sources 统一入口:SSRF 预检 → 站点分发 → 抓取。
 抓取是同步阻塞 IO(httpx 同步 client / yt-dlp 无异步 API),统一丢线程池执行——
-不能冻住事件循环(engine 单循环上还跑着 WS 流式和其他任务,见 P4 §2.1)。
+不能冻住事件循环(engine 单循环上还跑着 WS 流式和其他任务)。
 """
 import asyncio
 

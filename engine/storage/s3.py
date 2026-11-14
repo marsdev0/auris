@@ -1,6 +1,6 @@
 # Copyright (c) 2026 marsdev0
 # Licensed under the MIT License. See the LICENSE file for details.
-"""S3 artifact upload (P12-D8): the pipeline end uploads finished artifacts to object storage.
+"""S3 artifact upload: the pipeline end uploads finished artifacts to object storage.
 
 - Depends only on the S3 protocol (boto3 + endpoint override + path-style), storage impl is swappable;
 - Key convention (decision 2): dubbing/{task_id}/{output.mp4|narration.mp3|dub.srt}, no DB column needed;

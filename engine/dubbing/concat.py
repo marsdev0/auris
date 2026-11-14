@@ -10,7 +10,7 @@ from loguru import logger
 def ensure_ffmpeg() -> None:
     """Probe at startup; missing binary does not crash the process — the task fails only when it reaches this step"""
     if shutil.which("ffmpeg") is None:
-        logger.warning("ffmpeg 未安装:播报任务的拼接 stage 将失败(brew install ffmpeg)")
+        logger.warning("ffmpeg not installed: narration concat stage will fail (brew install ffmpeg)")
 
 
 async def concat_mp3(parts: list[Path], out: Path) -> None:

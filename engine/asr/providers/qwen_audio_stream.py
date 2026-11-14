@@ -50,7 +50,7 @@ class QwenAudioStreamingProvider:
 
     def __init__(self):
         if not ASR.QAS_API_KEY:
-            logger.warning("ASR_QAS_API_KEY 未配置, qwen3-realtime 将无法建链")
+            logger.warning("ASR_QAS_API_KEY not configured, qwen3-realtime cannot connect")
 
     async def transcribe(self, audio: bytes, lang: str | None = None) -> AsrResult:
         raise NotImplementedError("qwen-audio-streaming provider 只支持真流式")
@@ -59,7 +59,7 @@ class QwenAudioStreamingProvider:
         """
         真流式：chunk(PCM 16k/16bit/mono 字节流) -> partial/final 帧
 
-        每次调用新建一条 WS 连接 + task_id(MVP 不做连接复用,§1.6)
+        每次调用新建一条 WS 连接 + task_id(暂不做连接复用)
         """
         task_id = uuid.uuid4().hex[:32]
         t0 = time.monotonic()
@@ -129,7 +129,7 @@ class QwenAudioStreamingProvider:
             if event == _SERVER_TASK_FAILED:
                 raise RuntimeError(
                     f"任务失败: [{evt["header"].get('error_code')}] {evt["header"].get('error_message')}")
-            logger.info(f"未知事件: {event}")
+            logger.info(f"unknown event: {event}")
 
     async def _send_audio(self, ws, chunks, task_id):
         """裸二进制直传;chunks 耗尽 → finish-task。只在 task-started 之后被创建"""
@@ -157,7 +157,7 @@ class QwenAudioStreamingProvider:
         return False
 
     def _map_event(self, msg: str) -> PartialResult | None:
-        """result-generated → PartialResult(§1.3 映射表)。None = 不下发。"""
+        """result-generated → PartialResult(映射表见下方字段对应)。None = 不下发。"""
         evt = json.loads(msg)
         sentence = evt.get("payload", {}).get("output", {}).get("sentence", {})
         if not sentence:
@@ -167,7 +167,7 @@ class QwenAudioStreamingProvider:
         return PartialResult(
             is_final=sentence.get("sentence_end", False),
             text=sentence.get("text", ""),
-            beg_ms=sentence.get("begin_time"),  # 句级时间戳白拿(§1.3)
+            beg_ms=sentence.get("begin_time"),  # 句级时间戳直接带出
             end_ms=sentence.get("end_time"),
         )
 

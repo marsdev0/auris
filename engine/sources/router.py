@@ -1,4 +1,4 @@
-# router.py:engine 本机排障口,Java 不依赖,业务流量严禁直达(P4 §2.6)
+# router.py:engine 本机排障口,Java 不依赖,业务流量严禁直达
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 

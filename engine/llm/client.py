@@ -1,7 +1,7 @@
 """Engine platform LLM client.
 
 OpenAI-compatible egress (AsyncOpenAI), construction aligned with byok/factory.py::build_llm_client;
-After D1 part 2 (llm-gateway) lands, base_url flips to the gateway, consumer code untouched (D1-mini plan §3).
+After the llm-gateway lands, base_url flips to the gateway, consumer code untouched.
 
 Policies:
 - Missing config does not block startup: validated on first call, raising LlmError — Chinese-source tasks (skip translation) and other domains unaffected;
@@ -91,7 +91,7 @@ class LlmClient:
                     raise LlmError(f"LLM 请求被拒绝({e.status_code}): {e}") from e
                 # Transient (5xx/timeout/disconnect/429): backoff retry
                 last = e
-                logger.warning(f"llm chat 第{attempt}/{_RETRY}次失败: {e}")
+                logger.warning(f"llm chat attempt {attempt}/{_RETRY} failed: {e}")
                 if attempt < _RETRY:
                     await asyncio.sleep(_BACKOFF_S * 2 ** (attempt - 1) + random.uniform(0, 0.5))
         raise LlmError(f"LLM 调用重试耗尽: {last}")
@@ -111,6 +111,6 @@ def get_llm_client() -> LlmClient:
 def warn_if_unconfigured() -> None:
     """Startup reminder (called from main.py lifespan): missing config warns only, never blocks startup."""
     if not (LLM.BASE_URL and LLM.API_KEY):
-        logger.warning("LLM 端点未配置(LLM_BASE_URL/LLM_API_KEY):涉及 LLM 的功能(如翻译)不可用")
+        logger.warning("LLM endpoint not configured (LLM_BASE_URL/LLM_API_KEY): LLM features (e.g. translation) unavailable")
     elif not LLM.MODEL:
-        logger.warning("LLM_MODEL 未配置:未显式传 model 的调用(如翻译)会失败,显式传入可用")
+        logger.warning("LLM_MODEL not configured: calls without explicit model (e.g. translation) will fail; explicit model still works")

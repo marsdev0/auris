@@ -17,7 +17,7 @@ class DubSettings:
     # - false(生产语义:产物即删+24h TTL);开发/排障期在 .env 显式置 true。
     KEEP_ARTIFACTS = os.getenv("DUB_KEEP_ARTIFACTS", "false").lower() == "true"
 
-    # ------ Video alignment (D5, defaults from its plan appendix B.4) ------
+    # ------ Video alignment ------
     CPS = float(os.getenv("DUB_CPS", "4.5"))  # Chinese speech rate, chars/sec
     TOL = float(os.getenv("DUB_TOL", "1.5"))  # borrow cap from next unit's gap (s)
     MIN_SUB = float(os.getenv("DUB_MIN_SUB", "2.5"))  # short-window forced extension threshold (s)

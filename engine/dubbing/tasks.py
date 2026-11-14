@@ -50,7 +50,7 @@ def set(task_id: str, status: DubStatus | None = None, stage_index: int | None =
 
 
 def _guess_kind(url: str) -> str:
-    """URL-based task kind guess (D5 decision 4): bilibili/video extension → video, otherwise audio.
+    """URL-based task kind guess: bilibili/video extension → video, otherwise audio.
     Wrong guess backstop: after download a None video_path errors at copyfile into FAILED, visible."""
     from engine.sources import bilibili, direct
     if bilibili.match(url) or direct.is_video_url(url):
@@ -73,7 +73,7 @@ async def submit(url: str, byok: ByokContext | None = None) -> str:
 
 async def cleanup_expired() -> None:
     if DUB.KEEP_ARTIFACTS:
-        logger.info("排障模式(KEEP_ARTIFACTS): TTL 回收暂停,任务目录由人工管理")
+        logger.info("debug mode (KEEP_ARTIFACTS): TTL cleanup paused, task dirs managed manually")
         return
     while True:
         now = time.time()
@@ -83,14 +83,14 @@ async def cleanup_expired() -> None:
             _tasks.pop(tid)
             shutil.rmtree(DUB.DIR / tid, ignore_errors=True)  # whole task dir: snapshot + artifacts reclaimed together
         if expired:
-            logger.info(f"清理过期播报任务 {len(expired)} 个")
+            logger.info(f"cleaned {len(expired)} expired dubbing tasks")
         await asyncio.sleep(3600)
 
 
 async def resume_pending() -> None:
     """Startup scan: resume tasks interrupted by kill -9 etc. A single task's recovery failure pollutes only itself.
-    Dispatch by checkpoint.kind (D5): video -> VStage+_run_video (8 stages), audio -> Stage+_run (6 stages).
-    Then restore read-only entries of completed tasks for asset serving (P12 hotfix)."""
+    Dispatch by checkpoint.kind: video -> VStage+_run_video (8 stages), audio -> Stage+_run (6 stages).
+    Then restore read-only entries of completed tasks for asset serving."""
     from engine.dubbing import checkpoint as ckp
     from engine.dubbing.pipeline import _run, _run_video
     from engine.dubbing.types import VStage
@@ -104,7 +104,7 @@ async def resume_pending() -> None:
         try:
             start = enum_cls(state["stage_index"])
         except ValueError:
-            logger.warning(f"state stage 越界(跳过): {task_id}")
+            logger.warning(f"state stage out of range (skipped): {task_id}")
             continue
         now = time.time()
         _tasks[task_id] = DubbingTask(
@@ -113,11 +113,11 @@ async def resume_pending() -> None:
             url=state["url"], title=state.get("title"),
             created_at=now, updated_at=now)
         asyncio.create_task(runner(task_id, state["url"], start_stage=start))
-        logger.info(f"断点续跑 {task_id}: {kind} 从 stage {start.name} 起")
+        logger.info(f"resume {task_id}: {kind} from stage {start.name}")
     _restore_completed()
 
 def _restore_completed() -> None:
-    """Rebuild completed tasks after restart (P12 hotfix): the asset route only reads the in-memory
+    """Rebuild completed tasks after restart: the asset route only reads the in-memory
     registry; without rebuilding, "files on disk but engine amnesia" answers 404 for everything.
     Read-only recovery, no pipeline re-run; artifact names align with the pipeline final state
     (audio=narration.mp3, video=output.mp4). updated_at=now counts as one access so the TTL
@@ -132,7 +132,7 @@ def _restore_completed() -> None:
         tdir = ckp.task_dir(task_id)
         artifact = tdir / ("output.mp4" if kind == "video" else "narration.mp3")
         if not artifact.is_file():
-            logger.warning(f"completed 任务缺成品文件(跳过): {task_id} kind={kind}")
+            logger.warning(f"completed task missing artifacts (skipped): {task_id} kind={kind}")
             continue
         total = len(VStage) if kind == "video" else len(Stage)
         path_kw = {"video_path": str(artifact)} if kind == "video" else {"audio_path": str(artifact)}
@@ -142,4 +142,4 @@ def _restore_completed() -> None:
             url=state["url"], title=state.get("title"),
             audio_bytes=artifact.stat().st_size,
             created_at=now, updated_at=now, **path_kw)
-        logger.info(f"恢复已完成任务 {task_id}: kind={kind}(只读,供 asset 下发)")
+        logger.info(f"restored completed task {task_id}: kind={kind} (read-only, for asset serving)")

@@ -22,12 +22,12 @@ from engine.dubbing.router import router as dub_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"{APP.NAME} v{APP.VERSION} 启动中...")
-    logger.info(f"服务地址: http://{APP.HOST}:{APP.PORT}")
+    logger.info(f"{APP.NAME} v{APP.VERSION} starting...")
+    logger.info(f"service at: http://{APP.HOST}:{APP.PORT}")
 
     from engine.asr.service import get_asr_service
     svc = get_asr_service()
-    logger.info(f"已注册 ASR provider: {svc.registry.names()}")
+    logger.info(f"registered ASR providers: {svc.registry.names()}")
 
     from engine.asr.vad import get_vad_engine
     get_vad_engine()  # 预热 VAD(分段与流式共用单例)
@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
     yield
     cleanup_task.cancel()
     dub_cleanup.cancel()
-    logger.info("服务正在关闭...")
+    logger.info("service shutting down...")
 
 
 app = FastAPI(

@@ -42,7 +42,7 @@ class SegmentResult:
     text: str          # 失败段为空串,由 assembler 决定占位策略
     ok: bool
     latency_ms: float  # 单段耗时(含重试),观测用
-    # 句级明细(相对段内秒,D5 时间戳透出):provider verbose_json 的 segments 原样带出,
+    # 句级明细(相对段内秒,时间戳透出):provider verbose_json 的 segments 原样带出,
     # 时间轴拼接在 dubbing._transcribe_seg 消费侧完成——asr 域不长 dubbing 依赖
     seg_detail: list[tuple[float, float, str]] = field(default_factory=list)
 
@@ -107,7 +107,7 @@ class Scheduler:
                                 + random.uniform(0, 0.5))
 
                 latency = (asyncio.get_running_loop().time() - t0) * 1000
-                logger.error(f"seg#{seg.index} 重试耗尽,标记失败: {last_err}")
+                logger.error(f"seg#{seg.index} retries exhausted, marked failed: {last_err}")
                 await self._notify(on_done, seg.index, False)
                 return SegmentResult(
                     index=seg.index, start=seg.start, end=seg.end,
@@ -116,7 +116,7 @@ class Scheduler:
         except gate.QueueFullError:
             # 闸门获取处单独接:段级隔离兑底,任务不失败;不进重试
             # (队列满是过载信号,重试只会加剧,且此时未持闸门)
-            logger.error(f"seg#{seg.index} 被闸门拒绝(队列满): 过载信号")
+            logger.error(f"seg#{seg.index} rejected by gate (queue full): overload signal")
             await self._notify(on_done, seg.index, False)
             return SegmentResult(
                 index=seg.index, start=seg.start, end=seg.end,
@@ -131,4 +131,4 @@ class Scheduler:
         try:
             await on_done(index, ok)
         except Exception as e:
-            logger.warning(f"on_done 回调异常(忽略): {e}")
+            logger.warning(f"on_done callback error (ignored): {e}")

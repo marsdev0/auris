@@ -29,7 +29,7 @@ class SourceError(Exception):
 
 class SourceResult(BaseModel):
     """一次成功抓取的产物。audio/video_path 指向临时文件，消费方用完即删；
-    二者互斥(音频源只填 audio_path,视频源只填 video_path),kind 分流依据(D5)。"""
+    二者互斥(音频源只填 audio_path,视频源只填 video_path),kind 分流依据。"""
     audio_path: Path | None
     video_path: Path | None = None
     title: str
@@ -58,7 +58,7 @@ def download_to_temp(url: str, *, referer: str | None = None) -> Path:
         headers["Referer"] = referer
 
     tmp = tempfile.NamedTemporaryFile(prefix="auris-src-", suffix=".bin", delete=False, dir=TMP_DIR)
-    logger.info(f"下载落盘: {tmp.name}")
+    logger.info(f"download saved to disk: {tmp.name}")
     try:
         with httpx.Client(timeout=httpx.Timeout(_TOTAL_TIMEOUT, connect=_CONNECT_TIMEOUT),
                           follow_redirects=False) as client:

@@ -35,7 +35,7 @@ async def get_task(task_id: str):
 
 @router.get("/task/{task_id}/asset")
 async def asset(task_id: str, request: Request, kind: str = "audio"):
-    """Artifact delivery (D5 §6): kind=audio (D4 narration.mp3) | video (D5 output.mp4) | srt (D5 dub.srt)."""
+    """Artifact delivery: kind=audio (narration.mp3) | video (output.mp4) | srt (dub.srt)."""
     from pathlib import Path
     t = tasks.get_task(task_id)
     if t is None or t.status != DubStatus.COMPLETED:

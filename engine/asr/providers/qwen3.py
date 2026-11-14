@@ -16,7 +16,7 @@ _UPLOAD_FILENAME = "audio.wav"
 
 class Qwen3AsrProvider:
     name = "qwen3-asr"
-    capabilities: set[AsrCapability] = set()  # HTTP转写，无真流式
+    capabilities: set[AsrCapability] = set()  # HTTP transcription, no true streaming
     max_segment_s: int | None = None  # 类默认:平台 omlx 本地无限制 → 600 兜底
 
     def __init__(self, base_url: str | None = None, api_key: str | None = None,
@@ -37,7 +37,7 @@ class Qwen3AsrProvider:
         resp = await self._client.audio.transcriptions.create(
             file=buf,
             model=self._model,
-            language=lang or ASR.LANG or None,  # 空=auto 检测(D4:ASR 出源语,翻译归 LLM)
+            language=lang or ASR.LANG or None,  # 空=auto 检测(ASR 出源语,翻译归 LLM)
             response_format="verbose_json"
         )
         # verbose_json 才有 segments/language；服务端若只支持 json 则优雅降级为纯文本
@@ -59,7 +59,7 @@ class Qwen3AsrProvider:
         return asr_result
 
     async def stream(self, chunks: AsyncIterator[bytes], lang: str | None = None) -> AsyncIterator[PartialResult]:
-        raise NotImplementedError("qwen3-asr provider 不支持真流式")
+        raise NotImplementedError("qwen3-asr provider does not support streaming")
 
 
 # 模块级，供ProviderRegistry 目录扫描发现

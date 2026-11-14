@@ -10,7 +10,7 @@ submit() 秒回 task_id,后台协程跑完整管线:
 进度:transcribing 按段完成比例推进(细粒度);其余阶段标阶段切换(粗粒度)。
 
 内存态,MVP 取舍:进程重启任务即丢,持久化/断点续跑是触发式 L3 不预做
-(触发条件见设计文档 §8)。TTL 清理防泄漏。
+TTL 清理防泄漏。
 """
 import asyncio
 import time
@@ -149,10 +149,10 @@ async def _run(task_id: str, audio: bytes, provider_name: str | None) -> None:
             _set(task_id, failed_segments=result.failed)
 
         _set(task_id, "completed", 100, result=result)
-        logger.info(f"长音频任务 {task_id} 完成: {result.failed} 段失败")
+        logger.info(f"long-audio task {task_id} completed: {result.failed} segments failed")
     except Exception as e:
         _set(task_id, "failed", error=str(e))
-        logger.error(f"长音频任务 {task_id} 失败: {e}")
+        logger.error(f"long-audio task {task_id} failed: {e}")
 
 async def _run_url(task_id, url, provider_name, fetch_source):
     """URL 任务执行体:多一个 downloading 阶段,其余复用 _run"""
@@ -177,5 +177,5 @@ async def cleanup_expired() -> None:
         for tid in expired:
             del _tasks[tid]
         if expired:
-            logger.info(f"清理过期长音频任务 {len(expired)} 个")
+            logger.info(f"cleaned {len(expired)} expired long-audio tasks")
         await asyncio.sleep(3600)

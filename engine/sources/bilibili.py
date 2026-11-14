@@ -21,7 +21,7 @@ def fetch(url: str) -> SourceResult:
 
     out = Path(tempfile.mkdtemp(prefix="auris-bili-", dir=TMP_DIR))
     opts = {
-        "format": "bestvideo+bestaudio/best",  # D5:视频+音频流(DASH),yt-dlp 调 ffmpeg 合流
+        "format": "bestvideo+bestaudio/best",  # 视频+音频流(DASH),yt-dlp 调 ffmpeg 合流
         "merge_output_format": "mp4",
         "outtmpl": f"{out}/%(id)s.%(ext)s",
         "quiet": True,

@@ -2,8 +2,8 @@
 # Licensed under the MIT License. See the LICENSE file for details.
 """出站 URL 安全闸门(SSRF 防护)——横切能力,消费方按需 import。
 
-消费方:源抓取(sources)、贴链转写预检(asr)、BYOK 校验(byok, P12-1);
-域名白名单(P12-1 方案 §2.6,放开与否做成配置)将来也归这里。
+消费方:源抓取(sources)、贴链转写预检(asr)、BYOK 校验(byok);
+域名白名单(放开与否做成配置)将来也归这里。
 2026-10-16 从 engine/sources/base.py 上提(第三个消费方出现时)。
 """
 import ipaddress

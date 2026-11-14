@@ -11,7 +11,7 @@ checkpoint.json structure:
 
 data/dubbing/{task_id}/
     checkpoint.json   # resume snapshot (structure below) — named after the module
-    src.bin           # 1. downloaded audio (D3 used "temp dir + delete after use"; now persisted in task dir, cleaned at terminal state + TTL)
+    src.bin           # 1. downloaded audio (formerly temp dir + delete after use; now persisted in task dir, cleaned at terminal state + TTL)
     transcript.json   # 2. transcription artifact, English segments (= input of 3.translate)
     translation.json  # 3. translation artifact, Chinese segments (= input of 4.chunk)
     units.json        # 4. narration units (= input of 5.synth)
@@ -27,7 +27,7 @@ from loguru import logger
 from engine.config import DUB
 from engine.dubbing.types import DubStatus, Stage
 
-_V = 2   # v2 (D5): segment structure str→Seg break + kind field; v1 tasks not migrated (rerun is cheaper than migration)
+_V = 2   # v2: segment structure str→Seg break + kind field; v1 tasks not migrated (rerun is cheaper than migration)
 
 # Stage input artifacts: consumer stage → filename (renamed from stage{N}.json to content naming)
 _DATA_FILE = {
@@ -64,10 +64,10 @@ def load_checkpoint(task_id: str) -> dict | None:
     try:
         s = json.loads(p.read_text())
     except json.JSONDecodeError:
-        logger.warning(f"checkpoint.json 损坏(跳过): {task_id}")
+        logger.warning(f"checkpoint.json corrupted (skipped): {task_id}")
         return None
     if s.get("v") != _V:
-        logger.warning(f"checkpoint 版本不兼容 v={s.get('v')}(跳过): {task_id}")
+        logger.warning(f"checkpoint version incompatible v={s.get('v')} (skipped): {task_id}")
         return None
     return s
 

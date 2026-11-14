@@ -1,13 +1,13 @@
 # Copyright (c) 2026 marsdev0
 # Licensed under the MIT License. See the LICENSE file for details.
-"""全局并发闸门(P8 实现设计 §3/§5)。
+"""全局并发闸门。
 
-只管「M 个位先给谁」,不管业务(优先级由入口形态自判,§2)。
-两种模式(ASR_GATE_MODE,判定收敛在本模块,三个收编点无感知,§5.7):
+只管「M 个位先给谁」,不管业务(优先级由入口形态自判)。
+两种模式(ASR_GATE_MODE,判定收敛在本模块,三个收编点无感知):
   semaphore — ① 双信号量预留槽:batch 先过 SEM_BATCH(M-R) 再过 SEM_TOTAL(M),
              sync 只过总闸 → R 个位永不被批量占满
   priority  — ③ PriorityGate:有界优先级队列 + aging + per-task cap;
-             ② 的 task_sem 语义由 TASK_CAP 吸收(②已裁撤,见设计 §4 注)
+             ② 的 task_sem 语义由 TASK_CAP 吸收(②已裁撤)
 
 对外三个入口(收编点不感知模式):
   sync_lease()             POST /transcribe 同步          priority=0
@@ -25,30 +25,30 @@ from loguru import logger
 from engine.config import ASR
 
 assert ASR.GATE_TOTAL > ASR.GATE_RESERVE > 0, \
-    "启动校验(§3.3):ASR_GATE_TOTAL > ASR_GATE_RESERVE > 0(M=R 意味批量零并发,静默死锁)"
+    "启动校验:ASR_GATE_TOTAL > ASR_GATE_RESERVE > 0(M=R 意味批量零并发,静默死锁)"
 
 
 class QueueFullError(Exception):
-    """队列已满或 sync 等待超时(engine 层最后防线;业务准入在 P9)。"""
+    """队列已满或 sync 等待超时(engine 层最后防线;业务准入在上层)。"""
 
 
-# ==================== 模式一:双信号量(Step ①,§3) ====================
+# ==================== 模式一:双信号量 ====================
 
 SEM_TOTAL = asyncio.Semaphore(ASR.GATE_TOTAL)          # M
 SEM_BATCH = asyncio.Semaphore(ASR.GATE_TOTAL - ASR.GATE_RESERVE)
 
 
-# ==================== 模式二:PriorityGate(Step ③,§5) ====================
+# ==================== 模式二:PriorityGate ====================
 
 @dataclass
 class GateRequest:
-    priority: int          # 0/1/2(§2 入口自判)
+    priority: int          # 0/1/2(入口自判)
     task_id: str | None    # per-task cap 记账键;sync 为 None
     kind: str              # "sync"/"short"/"batch",仅观测标签
 
 
 class _Waiter:
-    """排队中的一个请求。§5.5:granted 标记区分「中签后取消」与「未中签取消」。"""
+    """排队中的一个请求。granted 标记区分「中签后取消」与「未中签取消」。"""
 
     __slots__ = ("req", "t_enqueue", "seq", "future", "granted", "t_grant", "skip_count")
 
@@ -83,7 +83,7 @@ def _pct(xs: list[float], p: float) -> float:
 
 
 class PriorityGate:
-    """有界优先级队列闸门。核心不变式(§5.3):inflight < M ⟺ waiters 空(或全员被 cap 卡住)。"""
+    """有界优先级队列闸门。核心不变式:inflight < M ⟺ waiters 空(或全员被 cap 卡住)。"""
 
     def __init__(self) -> None:
         self._capacity = ASR.GATE_TOTAL
@@ -97,7 +97,7 @@ class PriorityGate:
         self._wait_ms: dict[str, deque] = {k: deque(maxlen=1024) for k in ("sync", "short", "batch")}
         self._hold_ms: dict[str, deque] = {k: deque(maxlen=1024) for k in ("sync", "short", "batch")}
 
-    # ---- 排序键:aging 现算(§5.2 弃堆用列表的理由) ----
+    # ---- 排序键:aging 现算(弃堆用列表的理由) ----
     def _sort_key(self, w: _Waiter) -> tuple[int, int]:
         waited = time.monotonic() - w.t_enqueue
         age = int(waited // self._age_s) if self._age_s > 0 else 0
@@ -112,7 +112,7 @@ class PriorityGate:
         return (eff, w.seq)
 
     def _drain(self) -> None:
-        """还位/新到后补位。同步代码段,事件循环内不交错(§5.5 论证的前提)。"""
+        """还位/新到后补位。同步代码段,事件循环内不交错。"""
         while self._inflight < self._capacity and self._waiters:
             skipped: list[_Waiter] = []
             picked = False
@@ -122,7 +122,7 @@ class PriorityGate:
                     self._waiters.remove(w); skipped.append(w); w.skip_count += 1
                     continue
                 self._waiters.remove(w)
-                if w.future.cancelled():        # §5.5 双保险:cancel 交接窗口内的死等待者
+                if w.future.cancelled():        # 双保险:cancel 交接窗口内的死等待者
                     continue
                 self._inflight += 1
                 if w.req.task_id:               # sync(None)不记键,与 cap 检查对称
@@ -146,7 +146,7 @@ class PriorityGate:
         try:
             await w.future
         except asyncio.CancelledError:
-            if w.granted:                        # 中签后取消:还位(§5.5)
+            if w.granted:                        # 中签后取消:还位
                 self._release(w)
             elif w in self._waiters:             # 未中签:仅摘除,不碰 inflight
                 self._waiters.remove(w)
@@ -177,14 +177,14 @@ class PriorityGate:
                             for k in ("sync", "short", "batch")},
             "inflight_by_task": dict(self._inflight_by_task),
             "wait_ms": {k: dist(v) for k, v in self._wait_ms.items()},
-            "hold_ms": {k: dist(v) for k, v in self._hold_ms.items()},  # 下游单容量侧写,喂 P10 定 M
+            "hold_ms": {k: dist(v) for k, v in self._hold_ms.items()},  # 下游单容量侧写,用于定 M
         }
 
 
-# ==================== 模式分发(§5.7,收编点无感知) ====================
+# ==================== 模式分发(收编点无感知) ====================
 
 _GATE: PriorityGate | None = PriorityGate() if ASR.GATE_MODE == "priority" else None
-logger.info(f"gate 模式: {ASR.GATE_MODE}"
+logger.info(f"gate mode: {ASR.GATE_MODE}"
             f"(M={ASR.GATE_TOTAL}"
             + (f", queue_max={ASR.GATE_QUEUE_MAX})" if _GATE
                else f", R={ASR.GATE_RESERVE})"))
@@ -192,7 +192,7 @@ logger.info(f"gate 模式: {ASR.GATE_MODE}"
 
 @asynccontextmanager
 async def sync_lease():
-    """同步路径:priority 0。有界等待(§5.4):超时抛 QueueFullError → router 映射 429。"""
+    """同步路径:priority 0。有界等待:超时抛 QueueFullError → router 映射 429。"""
     if _GATE is None:
         try:
             await asyncio.wait_for(SEM_TOTAL.acquire(), timeout=ASR.SYNC_MAX_WAIT_S)
@@ -208,7 +208,7 @@ async def sync_lease():
                 _GATE.acquire(GateRequest(0, None, "sync")),
                 timeout=ASR.SYNC_MAX_WAIT_S)
         except asyncio.TimeoutError:
-            # 超时 cancel 走 acquire 的取消安全分支(§5.5):中签则还位,未中签则摘除,不泄漏
+            # 超时 cancel 走 acquire 的取消安全分支:中签则还位,未中签则摘除,不泄漏
             raise QueueFullError(f"sync 等待超时(>{ASR.SYNC_MAX_WAIT_S}s)")
         try:
             yield
@@ -245,7 +245,7 @@ async def segment_lease(task_id: str | None = None):
 
 
 def stats() -> dict:
-    """观测入口(§5.6,router 挂 GET /v1/asr/gate/stats)。"""
+    """观测入口(router 挂 GET /v1/asr/gate/stats)。"""
     if _GATE is not None:
         return _GATE.stats()
     return {

@@ -32,7 +32,7 @@ class FasterWhisperProvider:
         y = load_audio(audio)
         segments, info = self._model.transcribe(
             y,
-            language=lang or ASR.LANG or None,   # 空=auto 检测(D4:ASR 出源语,翻译归 LLM)
+            language=lang or ASR.LANG or None,   # 空=auto 检测(ASR 出源语,翻译归 LLM)
             vad_filter=True,
             beam_size=5,
             word_timestamps=False,
@@ -55,7 +55,7 @@ class FasterWhisperProvider:
         return asr_result
 
     async def stream(self, chunks: AsyncIterator[bytes], lang: str | None = None) -> AsyncIterator[PartialResult]:
-        raise NotImplementedError("whisper provider 不支持真流式")
+        raise NotImplementedError("whisper provider does not support streaming")
 
 
 # 模块级，供ProviderRegistry 目录扫描发现

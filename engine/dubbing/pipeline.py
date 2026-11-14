@@ -135,7 +135,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD, byok
             tasks.set(task_id, stage_index=int(Stage.CHUNK))
             units_out = chunk(units, DUB.CHUNK_MAX)
             if not units_out:
-                raise ValueError("转写结果为空,无可合成内容")
+                raise ValueError("empty transcription result, nothing to synthesize")
             ckp.write_stage_data(task_id, Stage.SYNTH, units_out)
             ckp.save_checkpoint(
                 task_id, url=url, stage_index=int(Stage.SYNTH), title=title
@@ -176,7 +176,7 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD, byok
             if cd.exists():
                 cd.rmdir()
         else:
-            logger.info(f"保留中间产物: {tdir}/chunks ({len(parts)} 段TTS)")
+            logger.info(f"keeping artifacts: {tdir}/chunks ({len(parts)} TTS chunks)")
         tasks.set(
             task_id,
             DubStatus.COMPLETED,
@@ -184,12 +184,12 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD, byok
             audio_path=str(final),
             audio_bytes=final.stat().st_size,
         )
-        logger.info(f"播报任务 {task_id} 完成: {final.stat().st_size}B")
+        logger.info(f"narration task {task_id} completed: {final.stat().st_size}B")
     except SourceError as e:
         _fail(task_id, url, title, e)
     except Exception as e:
         _fail(task_id, url, title, e)
-        logger.error(f"播报任务 {task_id} 失败: {e}")
+        logger.error(f"narration task {task_id} failed: {e}")
 
 
 async def _transcribe(audio: bytes, task_id: str, asr_provider=None) -> list[str]:
@@ -200,7 +200,7 @@ async def _transcribe(audio: bytes, task_id: str, asr_provider=None) -> list[str
     duration = len(y) / ASR.SAMPLE_RATE
     if duration > ASR.LONG_MAX_DURATION_S:
         raise ValueError(
-            f"音频 {duration / 3600:.1f}h 超过上限 {ASR.LONG_MAX_DURATION_S / 3600:.0f}h"
+            f"audio {duration / 3600:.1f}h exceeds limit {ASR.LONG_MAX_DURATION_S / 3600:.0f}h"
         )
     threshold = getattr(provider, "max_segment_s", None) or ASR.LONG_THRESHOLD_S
     if duration < threshold:
@@ -225,20 +225,22 @@ async def _synth_with_retry(provider, text: str):
             return await provider.synthesize(text)
         except Exception as e:  # edge-tts transient failures (rate limit/disconnect), backoff retry
             last = e
-            logger.warning(f"tts 段失败 第{attempt}/{_TTS_RETRY}次: {e}")
+            logger.warning(f"tts segment failed, attempt {attempt}/{_TTS_RETRY}: {e}")
             await asyncio.sleep(attempt)  # 1s/2s linear backoff, no exponential needed for the free channel
-    raise RuntimeError(f"TTS 重试耗尽: {last}")
+    raise RuntimeError(f"TTS retries exhausted: {last}")
 
 
 async def _transcribe_seg(audio: bytes, task_id: str, asr_provider=None) -> list[Seg]:
     """Seg variant of _transcribe: audio bytes -> sentence-level timestamped segments"""
     provider = asr_provider or get_asr_service().get(None)
     y = await asyncio.to_thread(load_audio, audio)
+    # 总采样数 / （16000点/秒） = 秒数
     duration = len(y) / ASR.SAMPLE_RATE
     if duration > ASR.LONG_MAX_DURATION_S:
-        raise ValueError(f"音频 {duration / 3600:.1f}h 超过上限")
+        raise ValueError(f"audio {duration / 3600:.1f}h exceeds the limit")
     threshold = getattr(provider, "max_segment_s", None) or ASR.LONG_THRESHOLD_S
     if duration < threshold:
+        # 浮点波形 -> 16bit PCM字节
         pcm = (np.clip(y, -1.0, 1.0) * 32767).astype("<i2").tobytes()
         async with gate.short_lease(task_id):
             res = await provider.transcribe(pcm_to_wav(pcm))
@@ -249,7 +251,7 @@ async def _transcribe_seg(audio: bytes, task_id: str, asr_provider=None) -> list
                 if s.text.strip()
             ]
         if not res.text.strip():  # empty-transcript fail-fast: no empty Seg, no wasted run to the artifact (lesson 2026-10-25)
-            raise RuntimeError("ASR 返回空文本(音频格式不支持或无语音)")
+            raise RuntimeError("ASR returned empty text (unsupported audio format or no speech)")
         return [
             Seg(text=res.text.strip(), start=0.0, end=round(duration, 3))
         ]  # degraded: single window
@@ -320,7 +322,6 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
                 kind="video",
             )
 
-        # 3. transcribe
         if start_stage <= VStage.TRANSCRIBE:
             tasks.set(task_id, stage_index=int(VStage.TRANSCRIBE))
             segs = await _transcribe_seg((tdir / "audio.mp3").read_bytes(), task_id, await _byok_asr_provider(byok))
@@ -335,7 +336,6 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
         else:
             segs = ckp.read_segs(task_id, "transcript.json")
 
-        # 4. translate
         if start_stage <= VStage.TRANSLATE:
             tasks.set(task_id, stage_index=int(VStage.TRANSLATE))
             segs = await tsl.translate_segs(segs, endpoint=await _byok_llm_endpoint(byok))
@@ -349,7 +349,7 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
             tasks.set(task_id, stage_index=int(VStage.RESPLIT))
             units = tl.resplit(segs)
             if not units:
-                raise ValueError("翻译结果为空,无可合成内容")
+                raise ValueError("empty translation result, nothing to synthesize")
             ckp.write_segs(task_id, "units.json", units)
             ckp.save_checkpoint(task_id, url=url, stage_index=int(VStage.SYNTH), title=title, kind="video")
         else:
@@ -389,10 +389,10 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
             for p in mp3s:
                 p.unlink(missing_ok=True)
         else:
-            logger.info(f"保留中间产物: {tdir}/{{chunks,aligned}} ({len(units)} 段)")
+            logger.info(f"keeping artifacts: {tdir}/{{chunks,aligned}} ({len(units)} segments)")
         tasks.set(task_id, DubStatus.COMPLETED, stage_index=len(VStage),
                   video_path=str(out), audio_bytes=out.stat().st_size)
-        logger.info(f"配音任务 {task_id} 完成: {out.stat().st_size}B")
+        logger.info(f"dubbing task {task_id} completed: {out.stat().st_size}B")
     except Exception as e:
         _fail(task_id, url, title, e, kind="video")
-        logger.error(f"配音任务 {task_id} 失败: {e}")
+        logger.error(f"dubbing task {task_id} failed: {e}")

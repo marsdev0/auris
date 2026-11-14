@@ -22,7 +22,7 @@ async def synthesize(req: SynthesizeReq):
         return JSONResponse(status_code=400, content={
             "code": 1, "message": f"text 需为 1~{_MAX_TEXT} 字", "data": None})
     service = get_tts_service()
-    provider = service.get()  # provider 选择参数等 BYOK/D4 需要时再加
+    provider = service.get()  # provider 选择参数等需要时再加
     try:
         result = await provider.synthesize(text, req.voice)
     except Exception:

@@ -1,6 +1,3 @@
-
-
-
 import asyncio
 import json
 import os
@@ -19,7 +16,7 @@ from engine.config import DUB, ASR
 async def _ffmpeg(*args: str, check: bool = True) -> tuple["asyncio.subprocess.Process", str]:
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
-        raise RuntimeError("ffmpeg 未安装")
+        raise RuntimeError("ffmpeg not installed")
     # Async subprocess: the engine event loop serves other tasks too
     # -hide_banner: suppress copyright banner
     # -nostdin: disable interaction (without it ffmpeg waits on stdin and background processes hang — the classic pitfall)
@@ -32,7 +29,7 @@ async def _ffmpeg(*args: str, check: bool = True) -> tuple["asyncio.subprocess.P
     _, err = await proc.communicate()
     err_text = err.decode(errors="replace")
     if check and proc.returncode != 0:
-        raise RuntimeError(f"ffmpeg 失败: {err_text[-300:]}")
+        raise RuntimeError(f"ffmpeg failed: {err_text[-300:]}")
     return proc, err_text
 
 
@@ -47,45 +44,50 @@ _DUR_RE = re.compile(r"Duration: (\d+):(\d+):(\d+(?:\.\d+)?)")
 
 
 async def probe_duration(p: Path) -> float:
-    """Measured duration (s) — the estimator's empirical backstop (§4.2): parse the Duration line from
+    """Measured duration (s) — the estimator's empirical backstop: parse the Duration line from
     the `ffmpeg -i` stderr banner. (pydub was used before, but its mediainfo depends on the ffprobe binary —
     the local evermeet static ffmpeg build has no ffprobe, hit FileNotFoundError in testing, so we parse ourselves;
     pydub is kept only for rebuild_track's native wav parsing.)"""
     _, err = await _ffmpeg("-i", str(p), "-f", "null", "-", check=False)
     m = _DUR_RE.search(err)
     if not m:
-        raise RuntimeError(f"无法解析时长: {p}")
+        raise RuntimeError(f"failed to parse duration: {p}")
     h, mnt, sec = int(m.group(1)), int(m.group(2)), float(m.group(3))
     return h * 3600 + mnt * 60 + sec
 
-async def align_all(units: list[Seg], mp3s: list[Path], wav_dir: Path
-                    ) -> tuple[list[list[float]], list[dict]]:
-    """⑦ Alignment main flow (L4+L5, §4.3): chunk-level unified time-stretch → sequential new-timeline advance → over-cap tail truncation.
+async def align_all(units: list[Seg], mp3s: list[Path], wav_dir: Path) -> tuple[list[list[float]], list[dict]]:
+    """Alignment main flow: chunk-level unified time-stretch → sequential new-timeline advance → over-cap tail truncation.
 
     Returns: new_times ([start,end] aligned with units) + speed stats (acceptance criterion 6 data).
     """
     wav_dir.mkdir(parents=True, exist_ok=True)
+    # idle time between the end of one unit and the start of the next（
     gaps = tl.gaps_of(units)
+    # how much the unit may overrun its window by borrowing from the next gap
     tols = [tl.tol_of(u, g) for u, g in zip(units, gaps)]
     chunks = tl.plan_chunks(units)
     new_times: list[list[float] | None] = [None] * len(units)
     speed_log: list[dict] = []
 
     for group in chunks:
+        # absolute deadline for the entire chunk's audio
         chunk_end = units[group[-1]].end + (tols[group[-1]] - (units[group[-1]].end - units[group[-1]].start))
         reals = [await probe_duration(p) for p in (mp3s[i] for i in group)]
+        # total budget = sum of all units' tolerances
         budget = sum(tols[i] for i in group)
+        # determine the stretch factor
         speed = min(max(sum(reals) / max(budget - 0.1, 0.1), 1.0), DUB.SPEED_MAX)
         cur = units[group[0]].start
         for k, i in enumerate(group):
             wav = wav_dir / f"{i:04d}.wav"
+            # time-stretch transcode
             await atempo(mp3s[i], wav, speed)
             ad = len(AudioSegment.from_wav(wav)) / 1000.0
             new_times[i] = [round(cur, 3), round(cur + ad, 3)]
             cur += ad
-            if k < len(group) - 1:              # keep intra-chunk gaps (shrunk by the speed factor, appendix B.2-6)
+            if k < len(group) - 1:              # keep intra-chunk gaps (shrunk by the speed factor)
                 cur += gaps[i] / speed
-        if cur > chunk_end + 0.05:              # L5: over cap → truncate from tail (reversed order, appendix B.2-5)
+        if cur > chunk_end + 0.05:              # L5: over cap → truncate from tail (reversed order)
             for i in reversed(group):
                 st, en = new_times[i]
                 if en <= chunk_end:
@@ -98,14 +100,14 @@ async def align_all(units: list[Seg], mp3s: list[Path], wav_dir: Path
                               "-ar", str(ASR.SAMPLE_RATE), "-ac", "1", str(tmp))
                 os.replace(tmp, wav)
                 new_times[i] = [st, round(st + keep, 3)]
-            logger.warning(f"chunk {group} 变速 {speed:.2f}x 后仍超顶,尾部截断")
+            logger.warning(f"chunk {group} still over cap after {speed:.2f}x stretch, tail truncated")
         speed_log.append({"chunk": group, "speed": round(speed, 3),
                           "over": round(cur - chunk_end, 3)})
     return new_times, speed_log
 
 
 async def atempo(src: Path, dst: Path, speed: float) -> None:
-    """Time-stretch (16k/mono wav output) + duration check: >2% over expectation → truncate + 50ms fade (appendix B.2-4/5)."""
+    """Time-stretch (16k/mono wav output) + duration check: >2% over expectation → truncate + 50ms fade"""
     if abs(speed - 1.0) < 0.01:
         await _ffmpeg("-i", str(src), "-ar", str(ASR.SAMPLE_RATE), "-ac", "1", str(dst))
         return
@@ -124,7 +126,7 @@ async def atempo(src: Path, dst: Path, speed: float) -> None:
 
 
 def rebuild_track(wavs: list[Path], new_times: list[list[float]], out_wav: Path) -> None:
-    """⑧ Track rebuild (§4.4): silence + time-stretched units laid on the new timeline (pydub, 16k/mono)."""
+    """Track rebuild: silence + time-stretched units laid on the new timeline (pydub, 16k/mono)."""
     track = AudioSegment.silent(duration=0, frame_rate=ASR.SAMPLE_RATE)
     prev_end = 0.0
     for wav, (st, en) in zip(wavs, new_times):
