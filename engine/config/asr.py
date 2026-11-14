@@ -17,8 +17,8 @@ class AsrSettings:
 
     INITIAL_PROMPT: str = os.getenv("ASR_INITIAL_PROMPT", "以下是普通话的句子,使用简体中文。")
 
-    QWEN3_BASE_URL = os.getenv("ASR_QWEN3_BASE_URL", "http://127.0.0.1:28000/v1")
-    QWEN3_API_KEY = os.getenv("ASR_QWEN3_API_KEY", "123456")
+    QWEN3_BASE_URL = os.getenv("ASR_QWEN3_BASE_URL", "")
+    QWEN3_API_KEY = os.getenv("ASR_QWEN3_API_KEY", "")
     QWEN3_MODEL = os.getenv("ASR_QWEN3_MODEL", "")
 
     # ------ Long-audio segmentation ------
@@ -43,8 +43,8 @@ class AsrSettings:
     # Note: getenv always returns str; must cast in place before putting into protocol JSON — the server is lenient
     # about string-typed params in run-task (task-started still returns), but disconnects with 1011
     # "parse parameters failed" once audio frames arrive (measured 2026-08-26); error surfacing at the audio stage is very hard to locate
-    QAS_MODEL = os.getenv("ASR_QAS_MODEL", "qwen-audio-3.0-asr-flash-streaming")
-    QAS_BASE_URL = os.getenv("ASR_QAS_BASE_URL", "wss://dashscope.aliyuncs.com/api-ws/v1/inference")
+    QAS_MODEL = os.getenv("ASR_QAS_MODEL", "")
+    QAS_BASE_URL = os.getenv("ASR_QAS_BASE_URL", "")
     QAS_API_KEY = os.getenv("ASR_QAS_API_KEY", "")
     QAS_HEARTBEAT = os.getenv("ASR_QAS_HEARTBEAT", "true").lower() == "true"  # 60s silence keepalive; heartbeat frames filtered inside provider
     QAS_SILENCE_MS = int(os.getenv("ASR_QAS_SILENCE_MS", "400"))  # max_sentence_silence (interactive; default 1300 suits meetings)

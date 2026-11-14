@@ -5,5 +5,5 @@ import os
 
 
 class TtsSettings:
-    DEFAULT_PROVIDER = os.getenv("TTS_PROVIDER", "edge_tts")
-    DEFAULT_VOICE = os.getenv("TTS_VOICE", "zh-CN-XiaoxiaoNeural")  # aligned with frontend edgeVoices default
+    DEFAULT_PROVIDER = os.getenv("TTS_PROVIDER", "")
+    DEFAULT_VOICE = os.getenv("TTS_VOICE", "")  # aligned with frontend edgeVoices default

@@ -24,24 +24,59 @@ const toast = ref('')
 let toastTimer: number | undefined
 let tickTimer: number | undefined
 
-async function refresh() {
-  // list first, then getTask per in-flight row — only getTask makes Java call engine and
-  // advance the DB (a plain list never does; tasks stuck in init forever, lesson 2026-10-25)
-  tasks.value = await listDubbing()
-  const inflight = tasks.value.filter(t => inFlight(t))
-  if (inflight.length > 0) {
-    await Promise.all(inflight.map(t => getDubbing(t.id).catch(() => null)))
-    tasks.value = await listDubbing()
+/** 智能轮询:in-flight 才转,全终态停表——空闲零请求。
+ *  状态推进仅依赖 getTask(Java→engine→回写 DB);列表是纯 DB 查询不触发推进(2026-10-25 教训)。 */
+function inFlightIds(): string[] {
+  return tasks.value.filter(t => inFlight(t)).map(t => t.id)
+}
+
+function ensureTicking() {
+  if (tickTimer == null) tickTimer = window.setInterval(tick, 3000)
+}
+
+function stopTicking() {
+  if (tickTimer != null) {
+    window.clearInterval(tickTimer)
+    tickTimer = undefined
   }
+}
+
+/** 全量刷新:拉列表 + 按需启停心跳(进页/提交/重试/回前台时调用) */
+async function refresh() {
+  tasks.value = await listDubbing()
+  await tick()
+}
+
+/** 心跳:仅对 in-flight 调 getTask 推进,返回值直接整行回写(不再每次重拉列表);全终态停表 */
+async function tick() {
+  const ids = inFlightIds()
+  if (ids.length === 0) {
+    stopTicking()
+    return
+  }
+  ensureTicking()
+  const fresh = await Promise.all(ids.map(id => getDubbing(id).catch(() => null)))
+  for (const t of fresh) {
+    if (!t) continue
+    const i = tasks.value.findIndex(x => x.id === t.id)
+    if (i >= 0) tasks.value[i] = t   // 整行替换:status/stageIndex/error 一起刷
+  }
+  if (inFlightIds().length === 0) stopTicking()
 }
 
 onMounted(async () => {
   await refresh()
-  tickTimer = window.setInterval(refresh, 3000)
+  // 回前台全量刷一次:兑住停表期间另一 tab/设备提交的任务(跨端场景)
+  document.addEventListener('visibilitychange', onVisible)
 })
 
+function onVisible() {
+  if (document.visibilityState === 'visible') refresh()
+}
+
 onUnmounted(() => {
-  if (tickTimer) window.clearInterval(tickTimer)
+  stopTicking()
+  document.removeEventListener('visibilitychange', onVisible)
 })
 
 function showToast(text: string) {

@@ -13,6 +13,8 @@ class AsrCapability(Enum):
 class AsrProvider(Protocol):
     name: str
     capabilities: set[AsrCapability]
+    # provider级别控制，不同asr厂商对于上传的音频大小限制不同
+    max_segment_s: int | None
 
     async def transcribe(self, audio: bytes, lang: str | None = None) -> AsrResult:
         """非流式：整段音频 -> 最终文本。所有 provider 必须实现。"""

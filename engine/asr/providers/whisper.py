@@ -9,11 +9,13 @@ from engine.asr.audio import load_audio
 from engine.asr.provider import AsrCapability
 from engine.asr.schemas import AsrResult, AsrSegment, AsrWord, PartialResult
 from engine.config import ASR
+from loguru import logger
 
 
 class FasterWhisperProvider:
     name = "whisper"
     capabilities: set[AsrCapability] = set()
+    max_segment_s = None  # 本地无限制 → 600 兜底,整段直传吃真句级
 
     def __init__(self) -> None:
         self._model = WhisperModel(
@@ -44,11 +46,13 @@ class FasterWhisperProvider:
                        ])
             for s in segments
         ]
-        return AsrResult(
+        asr_result = AsrResult(
             text="".join(s.text for s in segs),
             segments=segs,
             language=info.language
         )
+        logger.info(f"FasterWhisperProvider transcribe: {asr_result}")
+        return asr_result
 
     async def stream(self, chunks: AsyncIterator[bytes], lang: str | None = None) -> AsyncIterator[PartialResult]:
         raise NotImplementedError("whisper provider 不支持真流式")
