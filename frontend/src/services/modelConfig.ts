@@ -45,28 +45,55 @@ export interface ProviderMeta {
   value: string
   label: string
   needsKey: boolean
-  /** model 是否必填(渲染上三域统一都显示;true 时保存轻拦截,如 llm/asr;
-   *  tts 统一可选,edge_tts 无模型概念,其余可填 tts-1/speech-1.5 等) */
+  /** model 是否必填(llm/asr 需要;tts 统一可选;DeepSeek ASR 无模型概念不需要) */
   needsModel?: boolean
+  /** 预设端点:选中即回填 baseUrl,保留可编辑(代理/中转场景);自定义项为空 */
+  presetBaseUrl?: string
+  /** 待实现:下拉禁用可见(路线图展示),不入后端白名单,不可保存 */
+  comingSoon?: boolean
   note?: string
 }
 
-// ---------- provider 选项(静态展示数据,与后端 provider 枚举对齐) ----------
+// ---------- provider 选项(静态展示数据,与后端白名单/engine factory 同源) ----------
+// 同源三处:此数组 / ai-service ASR_PROVIDERS / engine byok/factory 分支;
+// 未实现的选项不入列(dashscope-asr 待 Filetrans 插件落地回归;fish_audio 待 engine 实现)
 
 export const llmProviders: ProviderMeta[] = [
-  { value: 'openai_compat', label: 'OpenAI 兼容接口', needsKey: true, needsModel: true, note: '硅基流动/DeepSeek/one-api 中转等' },
-  { value: 'dashscope', label: '阿里云百炼', needsKey: true, needsModel: true },
+  { value: 'openai_compat', label: 'OpenAI 兼容接口', needsKey: true, needsModel: true, note: 'DeepSeek/硅基流动/one-api 中转等' },
+  { value: 'dashscope', label: '阿里云百炼', needsKey: true, needsModel: true, presetBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', note: '百炼 compatible-mode(OpenAI 兼容)' },
 ]
 
 export const ttsProviders: ProviderMeta[] = [
   { value: 'edge_tts', label: 'Edge TTS', needsKey: false, note: '免费 · 无需 key · 无模型概念' },
-  { value: 'openai_tts', label: 'OpenAI TTS', needsKey: true, note: 'model 可选,默认 tts-1' },
-  { value: 'fish_audio', label: 'Fish Audio', needsKey: true, note: 'model 可选;支持音色克隆' },
+  { value: 'openai_tts', label: 'OpenAI TTS 兼容', needsKey: true, note: 'model 可选,默认 tts-1 · 填兼容端点 baseUrl' },
+  { value: 'fish_audio', label: 'Fish Audio', needsKey: true, comingSoon: true, note: '音色克隆 · engine 插件待实现' },
 ]
 
 export const asrProviders: ProviderMeta[] = [
-  { value: 'dashscope', label: '阿里云 DashScope', needsKey: true, needsModel: true, note: 'qwen-audio 文件转写,词级时间戳 ✅' },
-  { value: 'openai_whisper', label: 'OpenAI Whisper API', needsKey: true, needsModel: true, note: '无词级时间戳,配音不可用 ❌' },
+  {
+    value: 'deepseek', label: 'DeepSeek 语音识别', needsKey: true, needsModel: false,
+    presetBaseUrl: 'https://api.deepseek.com',
+    note: '与 LLM 复用同一个 key · ≤120s/次 · 无时间戳 → 播报✓ 视频△',
+  },
+  {
+    value: 'siliconflow', label: '硅基流动 SenseVoice', needsKey: true, needsModel: true,
+    presetBaseUrl: 'https://api.siliconflow.cn/v1',
+    note: '注册送额度 · 无时长限制 · 无时间戳 → 播报✓ 视频△ · model 填 FunAudioLLM/SenseVoiceSmall',
+  },
+  {
+    value: 'glm', label: 'GLM-ASR-2512', needsKey: true, needsModel: false,
+    presetBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    note: '≤30s/次(仅短视频/播报) · 支持热词 · 无时间戳 → 播报✓ 视频△',
+  },
+  {
+    value: 'openai_compat', label: 'OpenAI 兼容(自定义)', needsKey: true, needsModel: true,
+    note: '自建 vLLM/omlx/one-api 中转 · 有 verbose_json 句级时间戳的端点可支撑视频字幕',
+  },
+  {
+    value: 'dashscope', label: '阿里云 Filetrans', needsKey: true, needsModel: false,
+    comingSoon: true,
+    note: '词级时间戳+说话人分离 · 视频字幕最优解 · 插件待实现(需公网存储前置)',
+  },
 ]
 
 /** edge-tts 音色下拉 */

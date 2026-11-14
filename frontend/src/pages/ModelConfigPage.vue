@@ -34,11 +34,18 @@ const toast = ref<{ domain: ModelDomain; ok: boolean; text: string } | null>(nul
 let toastTimer: number | undefined
 
 function emptyDrafts(): Record<ModelDomain, ConfigDraft> {
+  const first = (ps: ProviderMeta[]) => ps[0]
+  const init = (ps: ProviderMeta[]) => ({ provider: first(ps).value, baseUrl: first(ps).presetBaseUrl ?? '', apiKey: '', model: '', voice: '' })
   return {
-    llm: { provider: 'openai_compat', baseUrl: '', apiKey: '', model: '', voice: '' },
-    tts: { provider: 'edge_tts', baseUrl: '', apiKey: '', model: '', voice: '' },
-    asr: { provider: 'dashscope', baseUrl: '', apiKey: '', model: '', voice: '' },
+    llm: init(llmProviders),
+    tts: init(ttsProviders),
+    asr: init(asrProviders),
   }
+}
+
+/** 切换服务商:回填预设 baseUrl(可改),覆盖旧值(换服务商=重置端点合理) */
+function onProviderChange(d: ModelDomain) {
+  drafts[d].baseUrl = providerMeta(d).presetBaseUrl ?? ''
 }
 
 onMounted(async () => {
@@ -64,12 +71,11 @@ function keyPlaceholder(d: ModelDomain): string {
   return masked ? `已保存 ${masked} · 留空则不修改` : 'sk-...'
 }
 
-/** 模型名占位符:按域/供应商给典型值,edge_tts 明示无需填写 */
+/** 模型名占位符:按域/供应商给典型值;无模型概念(DeepSeek ASR/edge_tts)明示无需填写 */
 function modelPlaceholder(d: ModelDomain): string {
-  if (d === 'llm') return 'deepseek-v3'
-  if (d === 'asr') return 'paraformer-v2'
+  if (d === 'llm') return 'deepseek-flash'
+  if (d === 'asr') return providerMeta(d).needsModel ? 'FunAudioLLM/SenseVoiceSmall' : '无需填写'
   if (drafts[d].provider === 'edge_tts') return '无需填写'
-  if (drafts[d].provider === 'fish_audio') return 'speech-1.5'
   return 'tts-1'
 }
 
@@ -84,6 +90,11 @@ async function save(d: ModelDomain) {
   const meta = providerMeta(d)
   if (meta.needsModel && !drafts[d].model) {
     showToast(d, false, `${meta.label} 需填写模型名`)
+    return
+  }
+  // baseUrl 前置拦截(后端白名单亦拦,这里避免一轮往返):需要 key 的 provider 都需要端点
+  if (meta.needsKey && !drafts[d].baseUrl) {
+    showToast(d, false, `${meta.label} 需填写 Base URL`)
     return
   }
   if (d === 'tts' && drafts[d].provider === 'edge_tts' && !drafts[d].voice) {
@@ -165,8 +176,10 @@ async function remove(d: ModelDomain) {
       <div class="grid grid-cols-2 gap-3">
         <label class="block">
           <span class="text-xs text-gray-500">服务商</span>
-          <select v-model="drafts[d].provider" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white">
-            <option v-for="p in domainMeta[d].providers" :key="p.value" :value="p.value">{{ p.label }}</option>
+          <select v-model="drafts[d].provider" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white" @change="onProviderChange(d)">
+            <option v-for="p in domainMeta[d].providers" :key="p.value" :value="p.value" :disabled="p.comingSoon">
+              {{ p.label }}{{ p.comingSoon ? '(待实现)' : '' }}
+            </option>
           </select>
           <span v-if="providerMeta(d).note" class="text-[11px] text-gray-400">{{ providerMeta(d).note }}</span>
         </label>
@@ -186,10 +199,12 @@ async function remove(d: ModelDomain) {
         </label>
         <label v-else-if="d === 'tts'" class="block">
           <span class="text-xs text-gray-500">音色(可选)</span>
-          <input v-model.trim="drafts[d].voice" :placeholder="drafts[d].provider === 'fish_audio' ? '音色 ID' : 'alloy'" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+          <input v-model.trim="drafts[d].voice" placeholder="alloy" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
         </label>
 
-        <label v-if="providerMeta(d).needsKey && d !== 'tts'" class="block col-span-2">
+        <!-- Base URL:需要 key 的 provider 都需要(修复:原模板排除 tts 域致 openai_tts 无处可填);
+             edge_tts needsKey=false 自动隐藏,预设项已回填 -->
+        <label v-if="providerMeta(d).needsKey" class="block col-span-2">
           <span class="text-xs text-gray-500">Base URL</span>
           <input v-model.trim="drafts[d].baseUrl" placeholder="https://api.example.com/v1" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
         </label>
