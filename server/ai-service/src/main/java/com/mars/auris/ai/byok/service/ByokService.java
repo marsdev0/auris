@@ -39,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * @author geyan
@@ -51,9 +52,17 @@ public class ByokService {
     private static final List<ModelDomain> list = List.of(ModelDomain.LLM, ModelDomain.ASR, ModelDomain.TTS);
 
     /**
-     * Self-hosted gateway providers, baseUrl required
+     * Provider whitelists per domain (02 方案 §3.2): three-way sync with the frontend provider
+     * arrays and the engine byok/factory branches. Unimplemented providers (fish_audio,
+     * dashscope-asr/Filetrans) stay off the lists until their engine plugins land — then all
+     * three sources update together in one release.
      */
-    private static final String PROVIDER_OPENAI_COMPAT = "openai_compat";
+    private static final Set<String> LLM_PROVIDERS = Set.of("openai_compat", "dashscope");
+    private static final Set<String> TTS_PROVIDERS = Set.of("edge_tts", "openai_tts", "openai_compat");
+    private static final Set<String> ASR_PROVIDERS = Set.of("deepseek", "siliconflow", "glm", "openai_compat");
+
+    /** Providers that need no baseUrl (only the keyless free channel edge_tts) */
+    private static final Set<String> BASE_URL_EXEMPT = Set.of("edge_tts");
 
     // Default; no tenants for now
     private static final Long tenantId = 0L;
@@ -74,6 +83,15 @@ public class ByokService {
     @Autowired
     private EngineClient engineClient;
 
+    /** Domain -> implemented provider whitelist (02 方案 §3.2; mirrors frontend arrays) */
+    private static Set<String> whitelistFor(ModelDomain domain) {
+        return switch (domain) {
+            case LLM -> LLM_PROVIDERS;
+            case TTS -> TTS_PROVIDERS;
+            case ASR -> ASR_PROVIDERS;
+        };
+    }
+
     public List<ModelConfigVO> list(Long userId) {
         List<ModelConfigVO> res = new ArrayList<>();
         for (ModelDomain item : list) {
@@ -86,10 +104,18 @@ public class ByokService {
     }
 
     public Boolean save(Long userId, SaveConfigReq req) {
-        // 1. Param validation: openai_compat requires baseUrl. model/voice allowed empty for model-less scenarios
-        //    (edge_tts has no model etc.); requiredness is controlled by the frontend per provider metadata, the backend keeps no special-case table
-        if (PROVIDER_OPENAI_COMPAT.equals(req.getProvider()) && !StringUtils.hasText(req.getBaseUrl())) {
-            throw new AurisException(CommonErrorCode.BAD_REQUEST, "openai_compat requires baseUrl");
+        // 1. Param validation: per-domain provider whitelist + baseUrl required (edge_tts exempt).
+        //    model/voice allowed empty for model-less providers (edge_tts, deepseek-asr have no model);
+        //    requiredness beyond this is controlled by the frontend per provider metadata.
+        Set<String> whitelist = whitelistFor(req.getDomain());
+        if (!whitelist.contains(req.getProvider())) {
+            throw new AurisException(CommonErrorCode.BAD_REQUEST,
+                    "unsupported " + req.getDomain().getValue() + " provider: " + req.getProvider()
+                            + ", expected one of " + whitelist);
+        }
+        if (!BASE_URL_EXEMPT.contains(req.getProvider()) && !StringUtils.hasText(req.getBaseUrl())) {
+            throw new AurisException(CommonErrorCode.BAD_REQUEST,
+                    req.getProvider() + " requires baseUrl");
         }
 
         // 2. Assemble entity; the ciphertext trio is set only when the key changes

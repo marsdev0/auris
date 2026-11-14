@@ -38,6 +38,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -129,11 +130,60 @@ class ByokServiceTest {
     void save_openaiCompatWithoutBaseUrl_rejectedBeforeDb() {
         SaveConfigReq req = new SaveConfigReq();
         req.setDomain(ModelDomain.LLM);
-        req.setProvider("openai_compat");   // baseUrl left null: the only provider-specific rule
+        req.setProvider("openai_compat");   // baseUrl left null: whitelist passes, baseUrl rule rejects
 
         AurisException ex = assertThrows(AurisException.class, () -> byokService.save(USER_ID, req));
         assertEquals(CommonErrorCode.BAD_REQUEST.getCode(), ex.getCode());
         verifyNoInteractions(modelConfigMapper);
+    }
+
+    // ========== save: provider whitelist (02 方案 §3.2, per-domain) ==========
+
+    @Test
+    void save_asrProviderNotImplemented_rejectedBeforeDb() {
+        // dashscope asr (Filetrans) has no engine plugin yet: off the whitelist,
+        // rejected here instead of surfacing as a confusing validate failure later
+        SaveConfigReq req = new SaveConfigReq();
+        req.setDomain(ModelDomain.ASR);
+        req.setProvider("dashscope");
+        req.setBaseUrl("https://dashscope.aliyuncs.com");
+
+        AurisException ex = assertThrows(AurisException.class, () -> byokService.save(USER_ID, req));
+        assertEquals(CommonErrorCode.BAD_REQUEST.getCode(), ex.getCode());
+        verifyNoInteractions(modelConfigMapper);
+    }
+
+    @Test
+    void save_ttsFishAudioNotImplemented_rejectedBeforeDb() {
+        SaveConfigReq req = new SaveConfigReq();
+        req.setDomain(ModelDomain.TTS);
+        req.setProvider("fish_audio");
+        req.setApiKey("sk-xxxxxxxx12345678");
+
+        AurisException ex = assertThrows(AurisException.class, () -> byokService.save(USER_ID, req));
+        assertEquals(CommonErrorCode.BAD_REQUEST.getCode(), ex.getCode());
+        verifyNoInteractions(modelConfigMapper);
+    }
+
+    @Test
+    void save_deepseekAsr_withoutModel_persists() {
+        // deepseek-asr has no model concept: model left null must pass the whitelist + persist
+        SaveConfigReq req = new SaveConfigReq();
+        req.setDomain(ModelDomain.ASR);
+        req.setProvider("deepseek");
+        req.setBaseUrl("https://api.deepseek.com");
+        req.setApiKey("sk-abcd1234efgh5678");
+        when(apiKeyCipher.encrypt("sk-abcd1234efgh5678")).thenReturn(CIPHER);
+        when(apiKeyCipher.currentVersion()).thenReturn(2);
+        when(modelConfigMapper.insert(any(UserModelConfigDO.class))).thenReturn(1);
+
+        assertTrue(byokService.save(USER_ID, req));
+
+        ArgumentCaptor<UserModelConfigDO> captor = ArgumentCaptor.forClass(UserModelConfigDO.class);
+        verify(modelConfigMapper).insert(captor.capture());
+        assertEquals("asr", captor.getValue().getDomain());
+        assertEquals("deepseek", captor.getValue().getProvider());
+        assertNull(captor.getValue().getModel());
     }
 
     // ========== save: uk collision -> edit existing ==========
