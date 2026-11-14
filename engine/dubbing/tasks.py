@@ -72,6 +72,9 @@ async def submit(url: str, byok: ByokContext | None = None) -> str:
 
 
 async def cleanup_expired() -> None:
+    if DUB.KEEP_ARTIFACTS:
+        logger.info("排障模式(KEEP_ARTIFACTS): TTL 回收暂停,任务目录由人工管理")
+        return
     while True:
         now = time.time()
         ttl = DUB.TASK_TTL_H * 3600

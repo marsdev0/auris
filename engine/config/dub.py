@@ -10,6 +10,13 @@ class DubSettings:
     CHUNK_MAX = int(os.getenv("DUB_CHUNK_MAX", "500"))  # same guardrail as tts router
     DIR = Path(__file__).resolve().parent.parent.parent / "data" / "dubbing"  # artifact root: repo/data/dubbing/{task_id}/
 
+    # 排障模式:
+    # - true 时
+    #   1.不清 chunks/(逐句TTS)/aligned/(变速后逐句音频)
+    #   2.暂停 TTL 回收,任务目录由人工管理
+    # - false(生产语义:产物即删+24h TTL);开发/排障期在 .env 显式置 true。
+    KEEP_ARTIFACTS = os.getenv("DUB_KEEP_ARTIFACTS", "false").lower() == "true"
+
     # ------ Video alignment (D5, defaults from its plan appendix B.4) ------
     CPS = float(os.getenv("DUB_CPS", "4.5"))  # Chinese speech rate, chars/sec
     TOL = float(os.getenv("DUB_TOL", "1.5"))  # borrow cap from next unit's gap (s)

@@ -169,11 +169,14 @@ async def _run(task_id: str, url: str, start_stage: Stage = Stage.DOWNLOAD, byok
             status=DubStatus.COMPLETED,
             title=title,
         )
-        for p in parts:
-            p.unlink(missing_ok=True)
-        cd = tdir / "chunks"
-        if cd.exists():
-            cd.rmdir()
+        if not DUB.KEEP_ARTIFACTS:
+            for p in parts:
+                p.unlink(missing_ok=True)
+            cd = tdir / "chunks"
+            if cd.exists():
+                cd.rmdir()
+        else:
+            logger.info(f"保留中间产物: {tdir}/chunks ({len(parts)} 段TTS)")
         tasks.set(
             task_id,
             DubStatus.COMPLETED,
@@ -199,8 +202,8 @@ async def _transcribe(audio: bytes, task_id: str, asr_provider=None) -> list[str
         raise ValueError(
             f"音频 {duration / 3600:.1f}h 超过上限 {ASR.LONG_MAX_DURATION_S / 3600:.0f}h"
         )
-
-    if duration < ASR.LONG_THRESHOLD_S:
+    threshold = getattr(provider, "max_segment_s", None) or ASR.LONG_THRESHOLD_S
+    if duration < threshold:
         # Short-circuit whole audio: single element with full text (no pause boundaries, chunker as backstop)
         pcm = (np.clip(y, -1.0, 1.0) * 32767).astype("<i2").tobytes()
         async with gate.short_lease(task_id):
@@ -234,7 +237,8 @@ async def _transcribe_seg(audio: bytes, task_id: str, asr_provider=None) -> list
     duration = len(y) / ASR.SAMPLE_RATE
     if duration > ASR.LONG_MAX_DURATION_S:
         raise ValueError(f"音频 {duration / 3600:.1f}h 超过上限")
-    if duration < ASR.LONG_THRESHOLD_S:
+    threshold = getattr(provider, "max_segment_s", None) or ASR.LONG_THRESHOLD_S
+    if duration < threshold:
         pcm = (np.clip(y, -1.0, 1.0) * 32767).astype("<i2").tobytes()
         async with gate.short_lease(task_id):
             res = await provider.transcribe(pcm_to_wav(pcm))
@@ -379,10 +383,13 @@ async def _run_video(task_id: str, url: str, start_stage: VStage = VStage.DOWNLO
         await storage.upload_artifacts(task_id, "video")
         ckp.save_checkpoint(task_id, url=url, stage_index=len(VStage), status=DubStatus.COMPLETED,
                             title=title, kind="video")
-        for p in (tdir / "aligned").glob("*.wav"):
-            p.unlink(missing_ok=True)
-        for p in mp3s:
-            p.unlink(missing_ok=True)
+        if not DUB.KEEP_ARTIFACTS:
+            for p in (tdir / "aligned").glob("*.wav"):
+                p.unlink(missing_ok=True)
+            for p in mp3s:
+                p.unlink(missing_ok=True)
+        else:
+            logger.info(f"保留中间产物: {tdir}/{{chunks,aligned}} ({len(units)} 段)")
         tasks.set(task_id, DubStatus.COMPLETED, stage_index=len(VStage),
                   video_path=str(out), audio_bytes=out.stat().st_size)
         logger.info(f"配音任务 {task_id} 完成: {out.stat().st_size}B")
