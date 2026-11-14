@@ -31,3 +31,8 @@ build-backend = "setuptools.build_meta"
 # engine 是根级包（直接长在 monorepo 根下），用 setuptools find 发现它
 [tool.setuptools.packages.find]
 include = ["engine*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
